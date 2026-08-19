@@ -12,7 +12,8 @@ import SwiftData
 struct AureaApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            Wallet.self,
+            Transaction.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 

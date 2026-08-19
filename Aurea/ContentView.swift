@@ -1,61 +1,115 @@
-//
-//  ContentView.swift
-//  Aurea
-//
-//  Created by Matteo Ragazzoli on 14/08/2026.
-//
-
 import SwiftUI
 import SwiftData
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
-
+    @Query private var wallets: [Wallet]
+    @Query(sort: \Transaction.date, order: .reverse)
+    private var transactions: [Transaction]
+    
+    @State private var showingQuickAdd = false
+    @State private var showingAddWallet = false
+    @State private var expandedCard: HomeCard?
+    
+    private var totalNetWorth: Decimal {
+        FinancialEngine.netWorth(wallets: wallets)
+    }
+    
+    private var todayTransactions: [Transaction] {
+        TimelineEngine.transactionsForToday(from: transactions)
+    }
     var body: some View {
-        NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
+        ZStack {
+            Theme.Colors.background
+                .ignoresSafeArea()
+            
+            ScrollView {
+                VStack(spacing: Theme.Spacing.medium) {
+                    
+                    // Patrimonio
+                    NetWorthCardView(
+                        totalNetWorth: totalNetWorth,
+                        walletCount: wallets.count,
+                        transactionCount: transactions.count,
+                        isExpanded: expandedCard == .netWorth
+                    ) {
+                        withAnimation(Theme.Animation.standard) {
+                            expandedCard = expandedCard == .netWorth ? nil : .netWorth
+                        }
+                    }
+                    
+                    // Oggi
+                    TodayCardView(
+                        transactions: todayTransactions,
+                        isExpanded: expandedCard == .today
+                    ) {
+                        withAnimation(Theme.Animation.standard) {
+                            expandedCard = expandedCard == .today ? nil : .today
+                        }
+                    }
+                    
+                    // Portafogli
+                    WalletsCardView(
+                        wallets: wallets,
+                        isExpanded: expandedCard == .wallets
+                    ) {
+                        withAnimation(Theme.Animation.standard) {
+                            expandedCard = expandedCard == .wallets ? nil : .wallets
+                        }
+                    } onAddWallet: {
+                        showingAddWallet = true
+                    }
+                    // Obiettivi
+                    GoalsCardView(
+                        isExpanded: expandedCard == .goals
+                    ) {
+                        withAnimation(Theme.Animation.standard) {
+                            expandedCard = expandedCard == .goals ? nil : .goals
+                        }
+                    }
+
+                    RelationshipsCardView(
+                        isExpanded: expandedCard == .relationships
+                    ) {
+                        withAnimation(Theme.Animation.standard) {
+                            expandedCard = expandedCard == .relationships ? nil : .relationships
+                        }
                     }
                 }
-                .onDelete(perform: deleteItems)
+                .padding(.horizontal, Theme.Spacing.medium)
+                .padding(.top, Theme.Spacing.medium)
+                .padding(.bottom, 80)
             }
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
+        }
+        .safeAreaInset(edge: .bottom) {
+            Button {
+                showingQuickAdd = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(.title2.weight(.medium))
+                    .frame(width: 54, height: 54)
+                    .background(.regularMaterial)
+                    .clipShape(Circle())
+                    .overlay {
+                        Circle()
+                            .strokeBorder(
+                                Color.primary.opacity(0.1),
+                                lineWidth: 1
+                            )
                     }
-                }
             }
-        } detail: {
-            Text("Select an item")
+            .buttonStyle(.plain)
+            .padding(.bottom, 8)
         }
-    }
-
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
+        .sheet(isPresented: $showingQuickAdd) {
+            QuickAddView()
         }
-    }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
-            }
+        .sheet(isPresented: $showingAddWallet) {
+            AddWalletView()
         }
     }
 }
 
 #Preview {
     ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
 }
