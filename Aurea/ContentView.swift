@@ -16,6 +16,7 @@ struct ContentView: View {
     @State private var showingAddRelationship = false
     @State private var showingAddGoal = false
     @State private var selectedRelationship: Relationship?
+    @State private var selectedGoal: Goal?
     @State private var expandedCard: HomeCard?
     
     private var totalNetWorth: Decimal {
@@ -73,6 +74,8 @@ struct ContentView: View {
                         }
                     } onAddGoal: {
                         showingAddGoal = true
+                    } onSelectGoal: { goal in
+                        selectedGoal = goal
                     }
 
                     RelationshipsCardView(
@@ -131,6 +134,9 @@ struct ContentView: View {
         }
         .sheet(item: $selectedRelationship) { relationship in
             RelationshipDetailView(relationship: relationship)
+        }
+        .sheet(item: $selectedGoal) { goal in
+            GoalDetailView(goal: goal)
         }
     }
 }
