@@ -13,8 +13,20 @@ struct AgendaView: View {
     }
 
     private var upcomingItems: [AgendaItem] {
-        items.filter { $0.date > Calendar.current.startOfDay(for: selectedDate) && !Calendar.current.isDate($0.date, inSameDayAs: selectedDate) && !$0.isCompleted }
-            .prefix(8).map { $0 }
+        items
+            .filter {
+                $0.date > Calendar.current.startOfDay(for: selectedDate) &&
+                !Calendar.current.isDate($0.date, inSameDayAs: selectedDate) &&
+                !$0.isCompleted
+            }
+            .prefix(8)
+            .map { $0 }
+    }
+
+    private var selectedDayTitle: String {
+        Calendar.current.isDateInToday(selectedDate)
+            ? "Oggi"
+            : selectedDate.formatted(date: .complete, time: .omitted)
     }
 
     var body: some View {
@@ -25,14 +37,20 @@ struct AgendaView: View {
                         .datePickerStyle(.graphical)
                 }
 
-                Section(Calendar.current.isDateInToday(selectedDate) ? "Oggi" : selectedDate.formatted(date: .complete, time: .omitted)) {
+                Section {
                     if dayItems.isEmpty {
-                        ContentUnavailableView("Nessun impegno", systemImage: "calendar.badge.checkmark", description: Text("La giornata è libera."))
+                        ContentUnavailableView(
+                            "Nessun impegno",
+                            systemImage: "calendar.badge.checkmark",
+                            description: Text("La giornata è libera.")
+                        )
                     } else {
                         ForEach(dayItems) { item in
                             agendaRow(item)
                         }
                     }
+                } header: {
+                    Text(selectedDayTitle)
                 }
 
                 if Calendar.current.isDateInToday(selectedDate) && !upcomingItems.isEmpty {
@@ -49,7 +67,9 @@ struct AgendaView: View {
                     Button("Chiudi") { dismiss() }
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Button { showingAdd = true } label: { Image(systemName: "plus") }
+                    Button { showingAdd = true } label: {
+                        Image(systemName: "plus")
+                    }
                 }
             }
             .sheet(isPresented: $showingAdd) {
@@ -91,6 +111,7 @@ struct AgendaView: View {
                 }
 
                 Spacer()
+
                 Image(systemName: "chevron.right")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
@@ -126,7 +147,8 @@ struct AddAgendaItemView: View {
                 Section("Tipo") {
                     Picker("Tipo", selection: $type) {
                         ForEach(AgendaItemType.allCases) { value in
-                            Label(value.title, systemImage: value.icon).tag(value)
+                            Label(value.title, systemImage: value.icon)
+                                .tag(value)
                         }
                     }
                     .pickerStyle(.segmented)
@@ -168,7 +190,9 @@ struct AddAgendaItemView: View {
             .navigationTitle("Nuovo impegno")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Annulla") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Annulla") { dismiss() }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Salva") {
                         let item = AgendaItem(
@@ -193,6 +217,7 @@ struct AddAgendaItemView: View {
 struct AgendaItemDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+
     let item: AgendaItem
 
     var body: some View {
@@ -201,9 +226,22 @@ struct AgendaItemDetailView: View {
                 Section("Impegno") {
                     LabeledContent("Tipo", value: item.type.title)
                     LabeledContent("Titolo", value: item.title)
-                    LabeledContent("Data", value: item.date.formatted(date: .long, time: item.hasTime ? .shortened : .omitted))
-                    if !item.note.isEmpty { LabeledContent("Note", value: item.note) }
-                    if item.repeatRule != .never { LabeledContent("Ripetizione", value: item.repeatRule.title) }
+                    LabeledContent(
+                        "Data",
+                        value: item.date.formatted(
+                            date: .long,
+                            time: item.hasTime ? .shortened : .omitted
+                        )
+                    )
+
+                    if !item.note.isEmpty {
+                        LabeledContent("Note", value: item.note)
+                    }
+
+                    if item.repeatRule != .never {
+                        LabeledContent("Ripetizione", value: item.repeatRule.title)
+                    }
+
                     if let reminder = item.reminderMinutesBefore {
                         LabeledContent("Promemoria", value: reminderText(reminder))
                     }
@@ -214,7 +252,10 @@ struct AgendaItemDetailView: View {
                         Button {
                             item.isCompleted.toggle()
                         } label: {
-                            Label(item.isCompleted ? "Segna da fare" : "Segna come completato", systemImage: item.isCompleted ? "arrow.uturn.backward.circle" : "checkmark.circle")
+                            Label(
+                                item.isCompleted ? "Segna da fare" : "Segna come completato",
+                                systemImage: item.isCompleted ? "arrow.uturn.backward.circle" : "checkmark.circle"
+                            )
                         }
                     }
                 }
@@ -231,7 +272,9 @@ struct AgendaItemDetailView: View {
             .navigationTitle("Dettaglio")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Chiudi") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Chiudi") { dismiss() }
+                }
             }
         }
     }
