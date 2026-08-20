@@ -6,9 +6,14 @@ struct GoalsCardView: View {
     let isExpanded: Bool
     let onTap: () -> Void
     let onAddGoal: () -> Void
+    let onSelectGoal: (Goal) -> Void
 
     private var activeGoals: [Goal] {
         goals.filter { !$0.isCompleted }
+    }
+
+    private var completedGoals: [Goal] {
+        goals.filter { $0.isCompleted }
     }
 
     var body: some View {
@@ -22,7 +27,7 @@ struct GoalsCardView: View {
                 } label: {
                     HStack {
                         if activeGoals.isEmpty {
-                            Text("Nessun obiettivo")
+                            Text("Nessun obiettivo attivo")
                                 .foregroundStyle(Theme.Colors.secondaryText)
                         } else {
                             Text("\(activeGoals.count) obiettiv\(activeGoals.count == 1 ? "o" : "i") attiv\(activeGoals.count == 1 ? "o" : "i")")
@@ -36,31 +41,28 @@ struct GoalsCardView: View {
 
                 if isExpanded {
                     if !activeGoals.isEmpty {
-                        VStack(spacing: Theme.Spacing.medium) {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+                            Text("In corso")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Theme.Colors.secondaryText)
+
                             ForEach(activeGoals) { goal in
-                                VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-                                    HStack {
-                                        Text(goal.title)
-                                            .fontWeight(.medium)
-
-                                        Spacer()
-
-                                        Text(progressText(for: goal))
-                                            .font(.caption)
-                                            .foregroundStyle(Theme.Colors.secondaryText)
-                                    }
-
-                                    ProgressView(value: progress(for: goal))
-
-                                    if let detail = detailText(for: goal) {
-                                        Text(detail)
-                                            .font(.caption)
-                                            .foregroundStyle(Theme.Colors.secondaryText)
-                                    }
-                                }
+                                goalButton(goal)
                             }
                         }
-                        .transition(.opacity)
+                    }
+
+                    if !completedGoals.isEmpty {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+                            Text("Completati")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Theme.Colors.secondaryText)
+
+                            ForEach(completedGoals) { goal in
+                                goalButton(goal)
+                                    .opacity(0.65)
+                            }
+                        }
                     }
 
                     Button {
@@ -68,10 +70,43 @@ struct GoalsCardView: View {
                     } label: {
                         Label("Aggiungi obiettivo", systemImage: "plus")
                     }
-                    .transition(.opacity)
                 }
             }
         }
+    }
+
+    private func goalButton(_ goal: Goal) -> some View {
+        Button {
+            onSelectGoal(goal)
+        } label: {
+            VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+                HStack {
+                    Text(goal.title)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.primary)
+
+                    Spacer()
+
+                    Text(goal.isCompleted ? "100%" : progressText(for: goal))
+                        .font(.caption)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                }
+
+                ProgressView(value: goal.isCompleted ? 1 : progress(for: goal))
+
+                if let detail = detailText(for: goal) {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func progress(for goal: Goal) -> Double {
