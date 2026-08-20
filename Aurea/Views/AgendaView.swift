@@ -4,6 +4,7 @@ import SwiftData
 struct AgendaView: View {
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \AgendaItem.date) private var items: [AgendaItem]
+    @Query(sort: \Transaction.date, order: .reverse) private var transactions: [Transaction]
     @State private var showingAdd = false
     @State private var selectedItem: AgendaItem?
     @State private var selectedDate = Date()
@@ -15,9 +16,31 @@ struct AgendaView: View {
     private var activeDayItems: [AgendaItem] { dayItems.filter { !$0.isCompleted } }
     private var completedDayItems: [AgendaItem] { dayItems.filter { $0.isCompleted } }
 
+    private var overdueItems: [AgendaItem] {
+        guard Calendar.current.isDateInToday(selectedDate) else { return [] }
+        let todayStart = Calendar.current.startOfDay(for: .now)
+        return items.filter {
+            $0.date < todayStart &&
+            !$0.isCompleted &&
+            ($0.type == .task || $0.type == .deadline)
+        }
+    }
+
     private var upcomingItems: [AgendaItem] {
         items.filter { $0.date > Calendar.current.endOfDay(for: selectedDate) && !$0.isCompleted }
             .prefix(8).map { $0 }
+    }
+
+    private var dayTransactions: [Transaction] {
+        transactions.filter { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) }
+    }
+
+    private var dayIncome: Decimal {
+        FinancialEngine.totalIncome(from: dayTransactions)
+    }
+
+    private var dayExpenses: Decimal {
+        FinancialEngine.totalExpenses(from: dayTransactions)
     }
 
     private var selectedDayTitle: String {
@@ -30,6 +53,28 @@ struct AgendaView: View {
                 Section {
                     DatePicker("Giorno", selection: $selectedDate, displayedComponents: .date)
                         .datePickerStyle(.graphical)
+                }
+
+                Section {
+                    HStack(spacing: 16) {
+                        dayMetric(title: "Impegni", value: "\(activeDayItems.count)", systemImage: "checklist")
+                        Divider().frame(height: 34)
+                        dayMetric(title: "Entrate", value: dayIncome.formatted(.currency(code: "EUR")), systemImage: "arrow.up.circle")
+                        Divider().frame(height: 34)
+                        dayMetric(title: "Spese", value: dayExpenses.formatted(.currency(code: "EUR")), systemImage: "arrow.down.circle")
+                    }
+                } header: {
+                    Text("Riepilogo del giorno")
+                }
+
+                if !overdueItems.isEmpty {
+                    Section {
+                        ForEach(overdueItems) { agendaRow($0) }
+                    } header: {
+                        Text("Da recuperare")
+                    } footer: {
+                        Text("Attività e scadenze dei giorni precedenti ancora aperte.")
+                    }
                 }
 
                 Section {
@@ -72,6 +117,20 @@ struct AgendaView: View {
                 normalizeRecurringEvents()
             }
         }
+    }
+
+    private func dayMetric(title: String, value: String, systemImage: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Label(title, systemImage: systemImage)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .labelStyle(.titleOnly)
+            Text(value)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func agendaRow(_ item: AgendaItem) -> some View {
@@ -261,7 +320,9 @@ struct AgendaItemDetailView: View {
             item.isCompleted = false
             AgendaNotificationManager.schedule(for: item)
         } else if item.repeatRule != .never {
-            item.date = item.repeatRule.nextDate(after: item.date)
+            var next = item.repeatRule.nextDate(after: item.date)
+            while next <= Date() { next = item.repeatRule.nextDate(after: next) }
+            item.date = next
             AgendaNotificationManager.schedule(for: item)
         } else {
             item.isCompleted = true
