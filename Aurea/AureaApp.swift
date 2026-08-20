@@ -16,6 +16,9 @@ struct AureaApp: App {
             Transaction.self,
             Relationship.self,
             Goal.self,
+            FinanceCategory.self,
+            Budget.self,
+            RecurringTransaction.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
