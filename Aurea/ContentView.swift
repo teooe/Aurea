@@ -18,6 +18,7 @@ struct ContentView: View {
     @State private var selectedRelationship: Relationship?
     @State private var selectedGoal: Goal?
     @State private var selectedWallet: Wallet?
+    @State private var selectedTransaction: Transaction?
     @State private var expandedCard: HomeCard?
     
     private var totalNetWorth: Decimal {
@@ -26,6 +27,10 @@ struct ContentView: View {
     
     private var todayTransactions: [Transaction] {
         TimelineEngine.transactionsForToday(from: transactions)
+    }
+
+    private var monthlyTransactions: [Transaction] {
+        TimelineEngine.transactionsForCurrentMonth(from: transactions)
     }
 
     var body: some View {
@@ -37,7 +42,8 @@ struct ContentView: View {
                 VStack(spacing: Theme.Spacing.medium) {
                     NetWorthCardView(
                         totalNetWorth: totalNetWorth,
-                        walletCount: wallets.count,
+                        wallets: wallets,
+                        monthlyTransactions: monthlyTransactions,
                         transactionCount: transactions.count,
                         isExpanded: expandedCard == .netWorth
                     ) {
@@ -53,6 +59,8 @@ struct ContentView: View {
                         withAnimation(Theme.Animation.standard) {
                             expandedCard = expandedCard == .today ? nil : .today
                         }
+                    } onSelectTransaction: { transaction in
+                        selectedTransaction = transaction
                     }
                     
                     WalletsCardView(
@@ -143,6 +151,9 @@ struct ContentView: View {
         }
         .sheet(item: $selectedWallet) { wallet in
             WalletDetailView(wallet: wallet)
+        }
+        .sheet(item: $selectedTransaction) { transaction in
+            TransactionDetailView(transaction: transaction)
         }
     }
 }
