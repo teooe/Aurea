@@ -11,6 +11,7 @@ final class Goal {
     var targetDate: Date?
     var createdAt: Date
     var isCompleted: Bool
+    var linkedWallet: Wallet?
 
     init(
         title: String,
@@ -19,7 +20,8 @@ final class Goal {
         currentAmount: Decimal = .zero,
         targetDate: Date? = nil,
         createdAt: Date = Date(),
-        isCompleted: Bool = false
+        isCompleted: Bool = false,
+        linkedWallet: Wallet? = nil
     ) {
         self.id = UUID()
         self.title = title
@@ -29,6 +31,7 @@ final class Goal {
         self.targetDate = targetDate
         self.createdAt = createdAt
         self.isCompleted = isCompleted
+        self.linkedWallet = linkedWallet
     }
 
     var type: GoalType {
