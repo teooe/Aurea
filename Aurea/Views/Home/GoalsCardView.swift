@@ -116,7 +116,9 @@ struct GoalsCardView: View {
         case .temporal:
             return temporalProgress(for: goal)
         case .both:
-            return min(economicProgress(for: goal), temporalProgress(for: goal))
+            // For a combined goal, the percentage represents money saved.
+            // The date remains the deadline, rather than reducing financial progress.
+            return economicProgress(for: goal)
         }
     }
 
