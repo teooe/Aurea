@@ -11,6 +11,7 @@ struct ContentView: View {
     
     @State private var showingQuickAdd = false
     @State private var showingAddWallet = false
+    @State private var showingAddRelationship = false
     @State private var expandedCard: HomeCard?
     
     private var totalNetWorth: Decimal {
@@ -77,6 +78,8 @@ struct ContentView: View {
                         withAnimation(Theme.Animation.standard) {
                             expandedCard = expandedCard == .relationships ? nil : .relationships
                         }
+                    } onAddRelationship: {
+                        showingAddRelationship = true
                     }
                 }
                 .padding(.horizontal, Theme.Spacing.medium)
@@ -109,6 +112,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingAddWallet) {
             AddWalletView()
+        }
+        .sheet(isPresented: $showingAddRelationship) {
+            AddRelationshipView()
         }
     }
 }
