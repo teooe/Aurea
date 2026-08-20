@@ -8,10 +8,13 @@ struct ContentView: View {
     private var transactions: [Transaction]
     @Query(sort: \Relationship.createdAt, order: .reverse)
     private var relationships: [Relationship]
+    @Query(sort: \Goal.createdAt, order: .reverse)
+    private var goals: [Goal]
     
     @State private var showingQuickAdd = false
     @State private var showingAddWallet = false
     @State private var showingAddRelationship = false
+    @State private var showingAddGoal = false
     @State private var selectedRelationship: Relationship?
     @State private var expandedCard: HomeCard?
     
@@ -22,6 +25,7 @@ struct ContentView: View {
     private var todayTransactions: [Transaction] {
         TimelineEngine.transactionsForToday(from: transactions)
     }
+
     var body: some View {
         ZStack {
             Theme.Colors.background
@@ -29,8 +33,6 @@ struct ContentView: View {
             
             ScrollView {
                 VStack(spacing: Theme.Spacing.medium) {
-                    
-                    // Patrimonio
                     NetWorthCardView(
                         totalNetWorth: totalNetWorth,
                         walletCount: wallets.count,
@@ -42,7 +44,6 @@ struct ContentView: View {
                         }
                     }
                     
-                    // Oggi
                     TodayCardView(
                         transactions: todayTransactions,
                         isExpanded: expandedCard == .today
@@ -52,7 +53,6 @@ struct ContentView: View {
                         }
                     }
                     
-                    // Portafogli
                     WalletsCardView(
                         wallets: wallets,
                         isExpanded: expandedCard == .wallets
@@ -64,16 +64,17 @@ struct ContentView: View {
                         showingAddWallet = true
                     }
                     
-                    // Obiettivi
                     GoalsCardView(
+                        goals: goals,
                         isExpanded: expandedCard == .goals
                     ) {
                         withAnimation(Theme.Animation.standard) {
                             expandedCard = expandedCard == .goals ? nil : .goals
                         }
+                    } onAddGoal: {
+                        showingAddGoal = true
                     }
 
-                    // Debiti e crediti
                     RelationshipsCardView(
                         relationships: relationships,
                         isExpanded: expandedCard == .relationships
@@ -124,6 +125,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingAddRelationship) {
             AddRelationshipView()
+        }
+        .sheet(isPresented: $showingAddGoal) {
+            AddGoalView()
         }
         .sheet(item: $selectedRelationship) { relationship in
             RelationshipDetailView(relationship: relationship)
