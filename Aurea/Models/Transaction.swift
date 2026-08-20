@@ -15,7 +15,8 @@ final class Transaction {
     var date: Date
     var category: String
     var title: String
-    
+    var transferGroupID: UUID?
+
     var wallet: Wallet?
 
     init(
@@ -24,7 +25,8 @@ final class Transaction {
         date: Date = .now,
         category: String,
         title: String,
-        wallet: Wallet? = nil
+        wallet: Wallet? = nil,
+        transferGroupID: UUID? = nil
     ) {
         self.id = UUID()
         self.type = type
@@ -33,5 +35,6 @@ final class Transaction {
         self.category = category
         self.title = title
         self.wallet = wallet
+        self.transferGroupID = transferGroupID
     }
 }
