@@ -8,21 +8,8 @@ struct TodayCardView: View {
     let onSelectTransaction: (Transaction) -> Void
     let onShowAll: () -> Void
 
-    private var expenses: Decimal {
-        transactions
-            .filter { $0.type == .expense && $0.category != "Trasferimento" }
-            .reduce(Decimal.zero) { $0 + $1.amount }
-    }
-
-    private var income: Decimal {
-        transactions
-            .filter { $0.type == .income && $0.category != "Trasferimento" }
-            .reduce(Decimal.zero) { $0 + $1.amount }
-    }
-
-    private var currencyCode: String {
-        transactions.compactMap { $0.wallet?.currencyCode }.first ?? "EUR"
-    }
+    private var expenses: Decimal { FinancialEngine.totalExpenses(from: transactions) }
+    private var income: Decimal { FinancialEngine.totalIncome(from: transactions) }
 
     var body: some View {
         AureaCard(
@@ -36,29 +23,16 @@ struct TodayCardView: View {
                     Group {
                         if transactions.isEmpty {
                             HStack {
-                                Text("Nessun movimento oggi")
-                                    .foregroundStyle(Theme.Colors.secondaryText)
+                                Text("Nessun movimento oggi").foregroundStyle(Theme.Colors.secondaryText)
                                 Spacer()
                             }
                         } else {
                             VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
                                 HStack(spacing: Theme.Spacing.medium) {
-                                    summaryItem(
-                                        title: "Entrate",
-                                        amount: income,
-                                        color: Theme.Colors.income
-                                    )
-
-                                    Divider()
-                                        .frame(height: 34)
-
-                                    summaryItem(
-                                        title: "Spese",
-                                        amount: expenses,
-                                        color: Theme.Colors.expense
-                                    )
+                                    summaryItem(title: "Entrate", amount: income, color: Theme.Colors.income)
+                                    Divider().frame(height: 34)
+                                    summaryItem(title: "Spese", amount: expenses, color: Theme.Colors.expense)
                                 }
-
                                 if !isExpanded {
                                     Text("\(transactions.count) \(transactions.count == 1 ? "movimento" : "movimenti")")
                                         .font(.caption)
@@ -74,17 +48,11 @@ struct TodayCardView: View {
                 if isExpanded {
                     if !transactions.isEmpty {
                         Divider()
-
                         ForEach(transactions) { transaction in
-                            Button {
-                                onSelectTransaction(transaction)
-                            } label: {
+                            Button { onSelectTransaction(transaction) } label: {
                                 HStack {
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text(transaction.title)
-                                            .fontWeight(.medium)
-                                            .foregroundStyle(.primary)
-
+                                        Text(transaction.title).fontWeight(.medium).foregroundStyle(.primary)
                                         HStack(spacing: 4) {
                                             Text(transaction.category)
                                             if let wallet = transaction.wallet {
@@ -95,16 +63,11 @@ struct TodayCardView: View {
                                         .font(.caption)
                                         .foregroundStyle(Theme.Colors.secondaryText)
                                     }
-
                                     Spacer()
-
                                     Text(formattedAmount(for: transaction))
                                         .fontWeight(.semibold)
                                         .foregroundStyle(color(for: transaction))
-
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                        .foregroundStyle(Theme.Colors.secondaryText)
+                                    Image(systemName: "chevron.right").font(.caption).foregroundStyle(Theme.Colors.secondaryText)
                                 }
                                 .contentShape(Rectangle())
                             }
@@ -112,9 +75,7 @@ struct TodayCardView: View {
                         }
                     }
 
-                    Button {
-                        onShowAll()
-                    } label: {
+                    Button { onShowAll() } label: {
                         Label("Tutti i movimenti", systemImage: "clock.arrow.circlepath")
                     }
                     .buttonStyle(.plain)
@@ -125,13 +86,8 @@ struct TodayCardView: View {
 
     private func summaryItem(title: String, amount: Decimal, color: Color) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(Theme.Colors.secondaryText)
-
-            Text(amount, format: .currency(code: currencyCode))
-                .font(.headline)
-                .foregroundStyle(color)
+            Text(title).font(.caption).foregroundStyle(Theme.Colors.secondaryText)
+            Text(amount, format: .currency(code: "EUR")).font(.headline).foregroundStyle(color)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -139,29 +95,19 @@ struct TodayCardView: View {
     private func formattedAmount(for transaction: Transaction) -> String {
         let code = transaction.wallet?.currencyCode ?? "EUR"
         let amount = transaction.amount.formatted(.currency(code: code))
-
         switch transaction.type {
-        case .expense:
-            return "−\(amount)"
-        case .income:
-            return "+\(amount)"
-        case .transfer:
-            return amount
+        case .expense: return "−\(amount)"
+        case .income: return "+\(amount)"
+        case .transfer: return amount
         }
     }
 
     private func color(for transaction: Transaction) -> Color {
-        if transaction.category == "Trasferimento" {
-            return Theme.Colors.primaryText
-        }
-
+        if transaction.category == "Trasferimento" { return Theme.Colors.primaryText }
         switch transaction.type {
-        case .expense:
-            return Theme.Colors.expense
-        case .income:
-            return Theme.Colors.income
-        case .transfer:
-            return Theme.Colors.primaryText
+        case .expense: return Theme.Colors.expense
+        case .income: return Theme.Colors.income
+        case .transfer: return Theme.Colors.primaryText
         }
     }
 }
