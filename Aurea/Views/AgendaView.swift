@@ -5,6 +5,7 @@ struct AgendaView: View {
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \AgendaItem.date) private var items: [AgendaItem]
     @Query(sort: \Transaction.date, order: .reverse) private var transactions: [Transaction]
+    @AppStorage("aurea.agenda.showCompleted") private var showCompletedAgenda = true
     @State private var showingAdd = false
     @State private var selectedItem: AgendaItem?
     @State private var selectedDate = Date()
@@ -14,7 +15,7 @@ struct AgendaView: View {
     let embedded: Bool
     init(embedded: Bool = false) { self.embedded = embedded }
 
-    private var filteredItems: [AgendaItem] { items.filter { filter.matches($0) && (searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || $0.title.localizedCaseInsensitiveContains(searchText) || $0.note.localizedCaseInsensitiveContains(searchText)) } }
+    private var filteredItems: [AgendaItem] { items.filter { filter.matches($0) && (showCompletedAgenda || !$0.isCompleted) && (searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || $0.title.localizedCaseInsensitiveContains(searchText) || $0.note.localizedCaseInsensitiveContains(searchText)) } }
     private var searchResults: [AgendaItem] { filteredItems.sorted(by: agendaSort) }
     private var dayItems: [AgendaItem] { filteredItems.filter { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) } }
     private var activeDayItems: [AgendaItem] { dayItems.filter { !$0.isCompleted }.sorted(by: agendaSort) }
@@ -61,7 +62,7 @@ struct AgendaView: View {
         Section { HStack(spacing: 16) { dayMetric(title: "Impegni", value: "\(activeDayItems.count)"); Divider().frame(height: 34); dayMetric(title: "Entrate", value: dayIncome.formatted(.currency(code: "EUR"))); Divider().frame(height: 34); dayMetric(title: "Spese", value: dayExpenses.formatted(.currency(code: "EUR"))) } } header: { Text("Riepilogo del giorno") }
         if !overdueItems.isEmpty { Section { ForEach(overdueItems) { agendaRow($0) } } header: { Label("Da recuperare", systemImage: "exclamationmark.triangle") } footer: { Text("Attività e scadenze dei giorni precedenti ancora aperte.") } }
         Section { if activeDayItems.isEmpty { ContentUnavailableView("Nessun impegno", systemImage: "calendar.badge.checkmark", description: Text("Non ci sono attività aperte per questa giornata.")) } else { ForEach(activeDayItems) { agendaRow($0) } } } header: { Text(selectedDayTitle) }
-        if !completedDayItems.isEmpty { Section { ForEach(completedDayItems) { agendaRow($0) } } header: { Text("Completati") } }
+        if showCompletedAgenda && !completedDayItems.isEmpty { Section { ForEach(completedDayItems) { agendaRow($0) } } header: { Text("Completati") } }
         if Calendar.current.isDateInToday(selectedDate) && !upcomingItems.isEmpty { Section { ForEach(upcomingItems) { agendaRow($0) } } header: { Text("Prossimamente") } }
     }
 
@@ -99,8 +100,13 @@ struct AddAgendaItemView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     let defaultDate: Date
-    @State private var title = ""; @State private var note = ""; @State private var type: AgendaItemType = .task; @State private var date: Date; @State private var hasTime = false; @State private var hasEndTime = false; @State private var endDate: Date; @State private var repeatRule: AgendaRepeat = .never; @State private var reminder = 0; @State private var priority: AgendaPriority = .normal
-    init(defaultDate: Date = .now) { self.defaultDate = defaultDate; _date = State(initialValue: defaultDate); _endDate = State(initialValue: defaultDate.addingTimeInterval(3600)) }
+    @State private var title = ""; @State private var note = ""; @State private var type: AgendaItemType = .task; @State private var date: Date; @State private var hasTime = false; @State private var hasEndTime = false; @State private var endDate: Date; @State private var repeatRule: AgendaRepeat = .never; @State private var reminder: Int; @State private var priority: AgendaPriority = .normal
+    init(defaultDate: Date = .now) {
+        self.defaultDate = defaultDate
+        _date = State(initialValue: defaultDate)
+        _endDate = State(initialValue: defaultDate.addingTimeInterval(3600))
+        _reminder = State(initialValue: UserDefaults.standard.integer(forKey: "aurea.agenda.defaultReminder"))
+    }
     var body: some View {
         NavigationStack {
             Form {
