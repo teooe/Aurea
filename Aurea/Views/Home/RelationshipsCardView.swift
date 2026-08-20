@@ -12,6 +12,10 @@ struct RelationshipsCardView: View {
         relationships.filter { !$0.isClosed }
     }
 
+    private var closedRelationships: [Relationship] {
+        relationships.filter { $0.isClosed }
+    }
+
     private var debts: [Relationship] {
         openRelationships.filter { $0.type == .debt }
     }
@@ -40,7 +44,7 @@ struct RelationshipsCardView: View {
                     Group {
                         if openRelationships.isEmpty {
                             HStack {
-                                Text("Nessuna relazione economica")
+                                Text("Nessuna relazione economica aperta")
                                     .foregroundStyle(Theme.Colors.secondaryText)
                                 Spacer()
                             }
@@ -76,43 +80,26 @@ struct RelationshipsCardView: View {
 
                 if isExpanded {
                     if !openRelationships.isEmpty {
-                        VStack(spacing: Theme.Spacing.small) {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+                            Text("Aperti")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Theme.Colors.secondaryText)
+
                             ForEach(openRelationships) { relationship in
-                                Button {
-                                    onSelectRelationship(relationship)
-                                } label: {
-                                    HStack {
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(relationship.personName)
-                                                .fontWeight(.medium)
-                                                .foregroundStyle(.primary)
+                                relationshipRow(relationship, settled: false)
+                            }
+                        }
+                        .transition(.opacity)
+                    }
 
-                                            if !relationship.note.isEmpty {
-                                                Text(relationship.note)
-                                                    .font(.caption)
-                                                    .foregroundStyle(Theme.Colors.secondaryText)
-                                                    .lineLimit(1)
-                                            }
-                                        }
+                    if !closedRelationships.isEmpty {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+                            Text("Saldati")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Theme.Colors.secondaryText)
 
-                                        Spacer()
-
-                                        Text(
-                                            relationship.amount,
-                                            format: .currency(code: "EUR")
-                                        )
-                                        .fontWeight(.medium)
-                                        .foregroundStyle(
-                                            relationship.type == .debt ? .red : .green
-                                        )
-
-                                        Image(systemName: "chevron.right")
-                                            .font(.caption)
-                                            .foregroundStyle(Theme.Colors.secondaryText)
-                                    }
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
+                            ForEach(closedRelationships) { relationship in
+                                relationshipRow(relationship, settled: true)
                             }
                         }
                         .transition(.opacity)
@@ -130,5 +117,54 @@ struct RelationshipsCardView: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func relationshipRow(_ relationship: Relationship, settled: Bool) -> some View {
+        Button {
+            onSelectRelationship(relationship)
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(relationship.personName)
+                            .fontWeight(.medium)
+
+                        if settled {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .foregroundStyle(settled ? .secondary : .primary)
+
+                    if !relationship.note.isEmpty {
+                        Text(relationship.note)
+                            .font(.caption)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer()
+
+                Text(
+                    relationship.amount,
+                    format: .currency(code: "EUR")
+                )
+                .fontWeight(.medium)
+                .foregroundStyle(
+                    settled
+                        ? AnyShapeStyle(Color.secondary)
+                        : AnyShapeStyle(relationship.type == .debt ? Color.red : Color.green)
+                )
+
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
