@@ -3,6 +3,7 @@ import SwiftData
 
 struct ContentView: View {
     @State private var selection = 0
+    @State private var previousSelection = 0
     @State private var showingQuickAdd = false
 
     var body: some View {
@@ -15,6 +16,10 @@ struct ContentView: View {
                 .tag(1)
                 .tabItem { Label("Movimenti", systemImage: "arrow.left.arrow.right") }
 
+            Color.clear
+                .tag(4)
+                .tabItem { Label("Aggiungi", systemImage: "plus.circle.fill") }
+
             AgendaView(embedded: true)
                 .tag(2)
                 .tabItem { Label("Agenda", systemImage: "calendar") }
@@ -23,18 +28,13 @@ struct ContentView: View {
                 .tag(3)
                 .tabItem { Label("Aurea", systemImage: "sparkles") }
         }
-        .safeAreaInset(edge: .bottom) {
-            Button { showingQuickAdd = true } label: {
-                Image(systemName: "plus")
-                    .font(.title2.weight(.semibold))
-                    .frame(width: 54, height: 54)
-                    .background(.regularMaterial)
-                    .clipShape(Circle())
-                    .overlay { Circle().strokeBorder(Color.primary.opacity(0.12), lineWidth: 1) }
-                    .shadow(radius: 8, y: 3)
+        .onChange(of: selection) { oldValue, newValue in
+            if newValue == 4 {
+                showingQuickAdd = true
+                selection = previousSelection
+            } else {
+                previousSelection = newValue
             }
-            .buttonStyle(.plain)
-            .padding(.bottom, 2)
         }
         .sheet(isPresented: $showingQuickAdd) { GlobalQuickAddView() }
     }
