@@ -2,30 +2,121 @@ import SwiftUI
 
 struct GoalsCardView: View {
 
+    let goals: [Goal]
     let isExpanded: Bool
     let onTap: () -> Void
+    let onAddGoal: () -> Void
+
+    private var activeGoals: [Goal] {
+        goals.filter { !$0.isCompleted }
+    }
 
     var body: some View {
-        Button {
-            onTap()
-        } label: {
-            AureaCard(
-                title: "Obiettivi",
-                icon: "target"
-            ) {
-                VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-                    Text("Nessun obiettivo")
-                        .foregroundStyle(Theme.Colors.secondaryText)
-
-                    if isExpanded {
-                        Text("Gli obiettivi ti permetteranno di monitorare traguardi economici e temporali.")
-                            .font(.caption)
-                            .foregroundStyle(Theme.Colors.secondaryText)
-                            .transition(.opacity)
+        AureaCard(
+            title: "Obiettivi",
+            icon: "target"
+        ) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+                Button {
+                    onTap()
+                } label: {
+                    HStack {
+                        if activeGoals.isEmpty {
+                            Text("Nessun obiettivo")
+                                .foregroundStyle(Theme.Colors.secondaryText)
+                        } else {
+                            Text("\(activeGoals.count) obiettiv\(activeGoals.count == 1 ? "o" : "i") attiv\(activeGoals.count == 1 ? "o" : "i")")
+                                .foregroundStyle(Theme.Colors.secondaryText)
+                        }
+                        Spacer()
                     }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                if isExpanded {
+                    if !activeGoals.isEmpty {
+                        VStack(spacing: Theme.Spacing.medium) {
+                            ForEach(activeGoals) { goal in
+                                VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+                                    HStack {
+                                        Text(goal.title)
+                                            .fontWeight(.medium)
+
+                                        Spacer()
+
+                                        Text(progressText(for: goal))
+                                            .font(.caption)
+                                            .foregroundStyle(Theme.Colors.secondaryText)
+                                    }
+
+                                    ProgressView(value: progress(for: goal))
+
+                                    if let detail = detailText(for: goal) {
+                                        Text(detail)
+                                            .font(.caption)
+                                            .foregroundStyle(Theme.Colors.secondaryText)
+                                    }
+                                }
+                            }
+                        }
+                        .transition(.opacity)
+                    }
+
+                    Button {
+                        onAddGoal()
+                    } label: {
+                        Label("Aggiungi obiettivo", systemImage: "plus")
+                    }
+                    .transition(.opacity)
                 }
             }
         }
-        .buttonStyle(.plain)
+    }
+
+    private func progress(for goal: Goal) -> Double {
+        switch goal.type {
+        case .economic:
+            return economicProgress(for: goal)
+        case .temporal:
+            return temporalProgress(for: goal)
+        case .both:
+            return min(economicProgress(for: goal), temporalProgress(for: goal))
+        }
+    }
+
+    private func economicProgress(for goal: Goal) -> Double {
+        guard let target = goal.targetAmount, target > 0 else { return 0 }
+        let current = NSDecimalNumber(decimal: goal.currentAmount).doubleValue
+        let targetValue = NSDecimalNumber(decimal: target).doubleValue
+        return min(max(current / targetValue, 0), 1)
+    }
+
+    private func temporalProgress(for goal: Goal) -> Double {
+        guard let targetDate = goal.targetDate else { return 0 }
+        let total = targetDate.timeIntervalSince(goal.createdAt)
+        guard total > 0 else { return 1 }
+        let elapsed = Date().timeIntervalSince(goal.createdAt)
+        return min(max(elapsed / total, 0), 1)
+    }
+
+    private func progressText(for goal: Goal) -> String {
+        "\(Int((progress(for: goal) * 100).rounded()))%"
+    }
+
+    private func detailText(for goal: Goal) -> String? {
+        var parts: [String] = []
+
+        if let target = goal.targetAmount {
+            parts.append(
+                "\(goal.currentAmount.formatted(.currency(code: "EUR"))) / \(target.formatted(.currency(code: "EUR")))"
+            )
+        }
+
+        if let targetDate = goal.targetDate {
+            parts.append("entro il \(targetDate.formatted(date: .abbreviated, time: .omitted))")
+        }
+
+        return parts.isEmpty ? nil : parts.joined(separator: " • ")
     }
 }
