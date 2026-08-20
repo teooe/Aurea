@@ -1,6 +1,13 @@
 import SwiftUI
+import SwiftData
 
 struct ContentView: View {
+    @Query private var relationships: [Relationship]
+    @Query private var budgets: [Budget]
+    @Query private var recurringTransactions: [RecurringTransaction]
+    @Query private var transactions: [Transaction]
+
+    @AppStorage("aurea.onboarding.completed") private var onboardingCompleted = false
     @State private var selection = 0
     @State private var previousSelection = 0
     @State private var showingQuickAdd = false
@@ -35,7 +42,21 @@ struct ContentView: View {
                 previousSelection = newValue
             }
         }
+        .onAppear {
+            AppNotificationManager.refresh(
+                relationships: relationships,
+                recurring: recurringTransactions,
+                budgets: budgets,
+                transactions: transactions
+            )
+        }
         .sheet(isPresented: $showingQuickAdd) { GlobalQuickAddView() }
+        .fullScreenCover(isPresented: Binding(
+            get: { !onboardingCompleted },
+            set: { if !$0 { onboardingCompleted = true } }
+        )) {
+            OnboardingView()
+        }
     }
 }
 
