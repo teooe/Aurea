@@ -4,28 +4,28 @@ import SwiftData
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var wallets: [Wallet]
-    @Query(sort: \Transaction.date, order: .reverse)
-    private var transactions: [Transaction]
-    @Query(sort: \Relationship.createdAt, order: .reverse)
-    private var relationships: [Relationship]
-    @Query(sort: \Goal.createdAt, order: .reverse)
-    private var goals: [Goal]
-    
+    @Query(sort: \Transaction.date, order: .reverse) private var transactions: [Transaction]
+    @Query(sort: \Relationship.createdAt, order: .reverse) private var relationships: [Relationship]
+    @Query(sort: \Goal.createdAt, order: .reverse) private var goals: [Goal]
+
     @State private var showingQuickAdd = false
     @State private var showingAddWallet = false
     @State private var showingAddRelationship = false
     @State private var showingAddGoal = false
     @State private var showingTransactions = false
+    @State private var showingFinanceCenter = false
     @State private var selectedRelationship: Relationship?
     @State private var selectedGoal: Goal?
     @State private var selectedWallet: Wallet?
     @State private var selectedTransaction: Transaction?
     @State private var expandedCard: HomeCard?
-    
+
+    private var activeWallets: [Wallet] { wallets.filter { !$0.isArchived } }
+
     private var totalNetWorth: Decimal {
-        FinancialEngine.netWorth(wallets: wallets)
+        FinancialEngine.netWorth(wallets: activeWallets)
     }
-    
+
     private var todayTransactions: [Transaction] {
         TimelineEngine.transactionsForToday(from: transactions)
     }
@@ -39,42 +39,34 @@ struct ContentView: View {
             VStack(spacing: Theme.Spacing.medium) {
                 NetWorthCardView(
                     totalNetWorth: totalNetWorth,
-                    wallets: wallets,
+                    wallets: activeWallets,
                     monthlyTransactions: monthlyTransactions,
                     transactionCount: transactions.count,
                     isExpanded: expandedCard == .netWorth
-                ) {
-                    toggleCard(.netWorth)
-                }
-                
+                ) { toggleCard(.netWorth) }
+
                 TodayCardView(
                     transactions: todayTransactions,
                     isExpanded: expandedCard == .today
-                ) {
-                    toggleCard(.today)
-                } onSelectTransaction: { transaction in
+                ) { toggleCard(.today) } onSelectTransaction: { transaction in
                     selectedTransaction = transaction
                 } onShowAll: {
                     showingTransactions = true
                 }
-                
+
                 WalletsCardView(
-                    wallets: wallets,
+                    wallets: activeWallets,
                     isExpanded: expandedCard == .wallets
-                ) {
-                    toggleCard(.wallets)
-                } onAddWallet: {
+                ) { toggleCard(.wallets) } onAddWallet: {
                     showingAddWallet = true
                 } onSelectWallet: { wallet in
                     selectedWallet = wallet
                 }
-                
+
                 GoalsCardView(
                     goals: goals,
                     isExpanded: expandedCard == .goals
-                ) {
-                    toggleCard(.goals)
-                } onAddGoal: {
+                ) { toggleCard(.goals) } onAddGoal: {
                     showingAddGoal = true
                 } onSelectGoal: { goal in
                     selectedGoal = goal
@@ -83,13 +75,27 @@ struct ContentView: View {
                 RelationshipsCardView(
                     relationships: relationships,
                     isExpanded: expandedCard == .relationships
-                ) {
-                    toggleCard(.relationships)
-                } onAddRelationship: {
+                ) { toggleCard(.relationships) } onAddRelationship: {
                     showingAddRelationship = true
                 } onSelectRelationship: { relationship in
                     selectedRelationship = relationship
                 }
+
+                Button {
+                    showingFinanceCenter = true
+                } label: {
+                    HStack {
+                        Label("Strumenti finanziari", systemImage: "chart.pie")
+                            .fontWeight(.medium)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                    }
+                    .padding()
+                    .background(.regularMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .buttonStyle(.plain)
 
                 Color.clear
                     .frame(height: expandedCard == nil ? 70 : 24)
@@ -113,11 +119,7 @@ struct ContentView: View {
                         .background(.regularMaterial)
                         .clipShape(Circle())
                         .overlay {
-                            Circle()
-                                .strokeBorder(
-                                    Color.primary.opacity(0.1),
-                                    lineWidth: 1
-                                )
+                            Circle().strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
                         }
                 }
                 .buttonStyle(.plain)
@@ -126,33 +128,16 @@ struct ContentView: View {
             }
         }
         .animation(Theme.Animation.standard, value: expandedCard)
-        .sheet(isPresented: $showingQuickAdd) {
-            QuickAddView()
-        }
-        .sheet(isPresented: $showingAddWallet) {
-            AddWalletView()
-        }
-        .sheet(isPresented: $showingAddRelationship) {
-            AddRelationshipView()
-        }
-        .sheet(isPresented: $showingAddGoal) {
-            AddGoalView()
-        }
-        .sheet(isPresented: $showingTransactions) {
-            TransactionsView()
-        }
-        .sheet(item: $selectedRelationship) { relationship in
-            RelationshipDetailView(relationship: relationship)
-        }
-        .sheet(item: $selectedGoal) { goal in
-            GoalDetailView(goal: goal)
-        }
-        .sheet(item: $selectedWallet) { wallet in
-            WalletDetailView(wallet: wallet)
-        }
-        .sheet(item: $selectedTransaction) { transaction in
-            TransactionDetailView(transaction: transaction)
-        }
+        .sheet(isPresented: $showingQuickAdd) { QuickAddView() }
+        .sheet(isPresented: $showingAddWallet) { AddWalletView() }
+        .sheet(isPresented: $showingAddRelationship) { AddRelationshipView() }
+        .sheet(isPresented: $showingAddGoal) { AddGoalView() }
+        .sheet(isPresented: $showingTransactions) { TransactionsView() }
+        .sheet(isPresented: $showingFinanceCenter) { FinanceCenterView() }
+        .sheet(item: $selectedRelationship) { relationship in RelationshipDetailView(relationship: relationship) }
+        .sheet(item: $selectedGoal) { goal in GoalDetailView(goal: goal) }
+        .sheet(item: $selectedWallet) { wallet in WalletDetailView(wallet: wallet) }
+        .sheet(item: $selectedTransaction) { transaction in TransactionDetailView(transaction: transaction) }
     }
 
     private func toggleCard(_ card: HomeCard) {
