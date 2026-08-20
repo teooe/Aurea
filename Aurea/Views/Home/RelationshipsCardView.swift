@@ -5,6 +5,7 @@ struct RelationshipsCardView: View {
     let relationships: [Relationship]
     let isExpanded: Bool
     let onTap: () -> Void
+    let onAddRelationship: () -> Void
 
     private var openRelationships: [Relationship] {
         relationships.filter { !$0.isClosed }
@@ -64,34 +65,46 @@ struct RelationshipsCardView: View {
                         }
                     }
 
-                    if isExpanded && !openRelationships.isEmpty {
-                        VStack(spacing: Theme.Spacing.small) {
-                            ForEach(openRelationships) { relationship in
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(relationship.personName)
-                                            .fontWeight(.medium)
+                    if isExpanded {
+                        if !openRelationships.isEmpty {
+                            VStack(spacing: Theme.Spacing.small) {
+                                ForEach(openRelationships) { relationship in
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(relationship.personName)
+                                                .fontWeight(.medium)
 
-                                        if !relationship.note.isEmpty {
-                                            Text(relationship.note)
-                                                .font(.caption)
-                                                .foregroundStyle(Theme.Colors.secondaryText)
-                                                .lineLimit(1)
+                                            if !relationship.note.isEmpty {
+                                                Text(relationship.note)
+                                                    .font(.caption)
+                                                    .foregroundStyle(Theme.Colors.secondaryText)
+                                                    .lineLimit(1)
+                                            }
                                         }
+
+                                        Spacer()
+
+                                        Text(
+                                            relationship.amount,
+                                            format: .currency(code: "EUR")
+                                        )
+                                        .fontWeight(.medium)
+                                        .foregroundStyle(
+                                            relationship.type == .debt ? .red : .green
+                                        )
                                     }
-
-                                    Spacer()
-
-                                    Text(
-                                        relationship.amount,
-                                        format: .currency(code: "EUR")
-                                    )
-                                    .fontWeight(.medium)
-                                    .foregroundStyle(
-                                        relationship.type == .debt ? .red : .green
-                                    )
                                 }
                             }
+                            .transition(.opacity)
+                        }
+
+                        Button {
+                            onAddRelationship()
+                        } label: {
+                            Label(
+                                "Aggiungi debito o credito",
+                                systemImage: "plus"
+                            )
                         }
                         .transition(.opacity)
                     }
