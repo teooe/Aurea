@@ -115,7 +115,7 @@ struct ContentView: View {
             }
         }
         .animation(Theme.Animation.standard, value: expandedCard)
-        .sheet(isPresented: $showingQuickAdd) { QuickAddView() }
+        .sheet(isPresented: $showingQuickAdd) { GlobalQuickAddView() }
         .sheet(isPresented: $showingAddWallet) { AddWalletView() }
         .sheet(isPresented: $showingAddRelationship) { AddRelationshipView() }
         .sheet(isPresented: $showingAddGoal) { AddGoalView() }
