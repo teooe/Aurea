@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var showingFinance = false
     @State private var showingAgenda = false
     @State private var showingQuickAdd = false
+    @State private var showingInsights = false
 
     private var openAgendaItems: Int { agendaItems.filter { !$0.isCompleted }.count }
     private var activeWallets: Int { wallets.filter { !$0.isArchived }.count }
@@ -26,6 +27,13 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section("Gestione") {
+                    Button { showingInsights = true } label: {
+                        HStack {
+                            Label("Panoramica completa", systemImage: "rectangle.3.group")
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+                        }
+                    }
                     Button { showingQuickAdd = true } label: {
                         Label("Aggiungi qualcosa", systemImage: "plus.circle")
                     }
@@ -93,6 +101,7 @@ struct SettingsView: View {
                     Button("Fine") { dismiss() }
                 }
             }
+            .sheet(isPresented: $showingInsights) { AureaInsightsView() }
             .sheet(isPresented: $showingFinance) { FinanceCenterView() }
             .sheet(isPresented: $showingAgenda) { AgendaView() }
             .sheet(isPresented: $showingQuickAdd) { GlobalQuickAddView() }
