@@ -10,6 +10,8 @@ final class Relationship {
     var note: String
     var createdAt: Date
     var isClosed: Bool
+    var dueDate: Date?
+    var paidAmount: Decimal?
 
     init(
         personName: String,
@@ -17,7 +19,9 @@ final class Relationship {
         type: RelationshipType,
         note: String = "",
         createdAt: Date = Date(),
-        isClosed: Bool = false
+        isClosed: Bool = false,
+        dueDate: Date? = nil,
+        paidAmount: Decimal? = nil
     ) {
         self.id = UUID()
         self.personName = personName
@@ -26,16 +30,17 @@ final class Relationship {
         self.note = note
         self.createdAt = createdAt
         self.isClosed = isClosed
+        self.dueDate = dueDate
+        self.paidAmount = paidAmount
     }
 
     var type: RelationshipType {
-        get {
-            RelationshipType(rawValue: typeRawValue) ?? .debt
-        }
-        set {
-            typeRawValue = newValue.rawValue
-        }
+        get { RelationshipType(rawValue: typeRawValue) ?? .debt }
+        set { typeRawValue = newValue.rawValue }
     }
+
+    var repaid: Decimal { paidAmount ?? 0 }
+    var remainingAmount: Decimal { max(amount - repaid, 0) }
 }
 
 enum RelationshipType: String, Codable, CaseIterable {
