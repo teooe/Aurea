@@ -6,46 +6,55 @@ struct WalletsCardView: View {
     let isExpanded: Bool
     let onTap: () -> Void
     let onAddWallet: () -> Void
+    let onSelectWallet: (Wallet) -> Void
 
     var body: some View {
-        Button {
-            onTap()
-        } label: {
-            AureaCard(
-                title: "Portafogli",
-                icon: "creditcard"
-            ) {
-                VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-
-                    if wallets.isEmpty {
-                        Text("Nessun portafoglio")
+        AureaCard(
+            title: "Portafogli",
+            icon: "creditcard"
+        ) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+                Button {
+                    onTap()
+                } label: {
+                    HStack {
+                        Text(wallets.isEmpty ? "Nessun portafoglio" : "\(wallets.count) portafogli")
                             .foregroundStyle(Theme.Colors.secondaryText)
-                    } else {
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                if isExpanded {
+                    if !wallets.isEmpty {
                         ForEach(wallets) { wallet in
-                            VStack(spacing: Theme.Spacing.small) {
-                                HStack {
-                                    Label(
-                                        wallet.name,
-                                        systemImage: wallet.icon
-                                    )
-
-                                    Spacer()
-
-                                    Text(
-                                        FinancialEngine.balance(for: wallet),
-                                        format: .currency(code: wallet.currencyCode)
-                                    )
-                                    .fontWeight(.medium)
-                                }
-
-                                if isExpanded {
+                            Button {
+                                onSelectWallet(wallet)
+                            } label: {
+                                VStack(spacing: Theme.Spacing.small) {
                                     HStack {
-                                        Text(wallet.currencyCode)
+                                        Label(wallet.name, systemImage: wallet.icon)
+                                            .foregroundStyle(.primary)
 
                                         Spacer()
 
-                                        Text("Saldo iniziale")
+                                        Text(
+                                            FinancialEngine.balance(for: wallet),
+                                            format: .currency(code: wallet.currencyCode)
+                                        )
+                                        .fontWeight(.medium)
+                                        .foregroundStyle(.primary)
 
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption)
+                                            .foregroundStyle(Theme.Colors.secondaryText)
+                                    }
+
+                                    HStack {
+                                        Text(wallet.currencyCode)
+                                        Spacer()
+                                        Text("Saldo iniziale")
                                         Text(
                                             wallet.initialBalance,
                                             format: .currency(code: wallet.currencyCode)
@@ -53,26 +62,20 @@ struct WalletsCardView: View {
                                     }
                                     .font(.caption)
                                     .foregroundStyle(Theme.Colors.secondaryText)
-                                    .transition(.opacity)
                                 }
+                                .contentShape(Rectangle())
                             }
+                            .buttonStyle(.plain)
                         }
                     }
 
-                    if isExpanded {
-                        Button {
-                            onAddWallet()
-                        } label: {
-                            Label(
-                                "Aggiungi portafoglio",
-                                systemImage: "plus"
-                            )
-                        }
-                        .transition(.opacity)
+                    Button {
+                        onAddWallet()
+                    } label: {
+                        Label("Aggiungi portafoglio", systemImage: "plus")
                     }
                 }
             }
         }
-        .buttonStyle(.plain)
     }
 }
