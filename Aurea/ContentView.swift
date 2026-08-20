@@ -62,6 +62,7 @@ struct ContentView: View {
                     } onAddWallet: {
                         showingAddWallet = true
                     }
+                    
                     // Obiettivi
                     GoalsCardView(
                         isExpanded: expandedCard == .goals
@@ -71,6 +72,7 @@ struct ContentView: View {
                         }
                     }
 
+                    // Debiti e crediti
                     RelationshipsCardView(
                         relationships: relationships,
                         isExpanded: expandedCard == .relationships
@@ -88,25 +90,29 @@ struct ContentView: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            Button {
-                showingQuickAdd = true
-            } label: {
-                Image(systemName: "plus")
-                    .font(.title2.weight(.medium))
-                    .frame(width: 54, height: 54)
-                    .background(.regularMaterial)
-                    .clipShape(Circle())
-                    .overlay {
-                        Circle()
-                            .strokeBorder(
-                                Color.primary.opacity(0.1),
-                                lineWidth: 1
-                            )
-                    }
+            if expandedCard == nil {
+                Button {
+                    showingQuickAdd = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.title2.weight(.medium))
+                        .frame(width: 54, height: 54)
+                        .background(.regularMaterial)
+                        .clipShape(Circle())
+                        .overlay {
+                            Circle()
+                                .strokeBorder(
+                                    Color.primary.opacity(0.1),
+                                    lineWidth: 1
+                                )
+                        }
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, 8)
+                .transition(.scale.combined(with: .opacity))
             }
-            .buttonStyle(.plain)
-            .padding(.bottom, 8)
         }
+        .animation(Theme.Animation.standard, value: expandedCard)
         .sheet(isPresented: $showingQuickAdd) {
             QuickAddView()
         }
