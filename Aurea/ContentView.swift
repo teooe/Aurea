@@ -6,6 +6,8 @@ struct ContentView: View {
     @Query private var wallets: [Wallet]
     @Query(sort: \Transaction.date, order: .reverse)
     private var transactions: [Transaction]
+    @Query(sort: \Relationship.createdAt, order: .reverse)
+    private var relationships: [Relationship]
     
     @State private var showingQuickAdd = false
     @State private var showingAddWallet = false
@@ -69,6 +71,7 @@ struct ContentView: View {
                     }
 
                     RelationshipsCardView(
+                        relationships: relationships,
                         isExpanded: expandedCard == .relationships
                     ) {
                         withAnimation(Theme.Animation.standard) {
