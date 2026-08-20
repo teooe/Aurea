@@ -28,12 +28,12 @@ struct AgendaView: View {
     private var dayIncome: Decimal {
         dayTransactions
             .filter { $0.type == .income && $0.category != "Trasferimento" }
-            .reduce(Decimal.zero) { $0 + FinancialEngine.amountInEUR(for: $1) }
+            .reduce(Decimal.zero) { $0 + $1.amount }
     }
     private var dayExpenses: Decimal {
         dayTransactions
             .filter { $0.type == .expense && $0.category != "Trasferimento" }
-            .reduce(Decimal.zero) { $0 + FinancialEngine.amountInEUR(for: $1) }
+            .reduce(Decimal.zero) { $0 + $1.amount }
     }
     private var selectedDayTitle: String { Calendar.current.isDateInToday(selectedDate) ? "Oggi" : selectedDate.formatted(date: .complete, time: .omitted) }
 
