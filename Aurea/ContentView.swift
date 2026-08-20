@@ -12,6 +12,7 @@ struct ContentView: View {
     @State private var showingQuickAdd = false
     @State private var showingAddWallet = false
     @State private var showingAddRelationship = false
+    @State private var selectedRelationship: Relationship?
     @State private var expandedCard: HomeCard?
     
     private var totalNetWorth: Decimal {
@@ -82,6 +83,8 @@ struct ContentView: View {
                         }
                     } onAddRelationship: {
                         showingAddRelationship = true
+                    } onSelectRelationship: { relationship in
+                        selectedRelationship = relationship
                     }
                 }
                 .padding(.horizontal, Theme.Spacing.medium)
@@ -121,6 +124,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingAddRelationship) {
             AddRelationshipView()
+        }
+        .sheet(item: $selectedRelationship) { relationship in
+            RelationshipDetailView(relationship: relationship)
         }
     }
 }
