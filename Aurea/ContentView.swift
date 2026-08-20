@@ -7,6 +7,7 @@ struct ContentView: View {
     @Query(sort: \Transaction.date, order: .reverse) private var transactions: [Transaction]
     @Query(sort: \Relationship.createdAt, order: .reverse) private var relationships: [Relationship]
     @Query(sort: \Goal.createdAt, order: .reverse) private var goals: [Goal]
+    @Query(sort: \AgendaItem.date) private var agendaItems: [AgendaItem]
 
     @State private var showingQuickAdd = false
     @State private var showingAddWallet = false
@@ -14,6 +15,7 @@ struct ContentView: View {
     @State private var showingAddGoal = false
     @State private var showingTransactions = false
     @State private var showingFinanceCenter = false
+    @State private var showingAgenda = false
     @State private var selectedRelationship: Relationship?
     @State private var selectedGoal: Goal?
     @State private var selectedWallet: Wallet?
@@ -21,75 +23,65 @@ struct ContentView: View {
     @State private var expandedCard: HomeCard?
 
     private var activeWallets: [Wallet] { wallets.filter { !$0.isArchived } }
-
-    private var totalNetWorth: Decimal {
-        FinancialEngine.netWorth(wallets: activeWallets)
-    }
-
-    private var todayTransactions: [Transaction] {
-        TimelineEngine.transactionsForToday(from: transactions)
-    }
-
-    private var monthlyTransactions: [Transaction] {
-        TimelineEngine.transactionsForCurrentMonth(from: transactions)
-    }
+    private var totalNetWorth: Decimal { FinancialEngine.netWorth(wallets: activeWallets) }
+    private var todayTransactions: [Transaction] { TimelineEngine.transactionsForToday(from: transactions) }
+    private var monthlyTransactions: [Transaction] { TimelineEngine.transactionsForCurrentMonth(from: transactions) }
+    private var todayAgenda: [AgendaItem] { agendaItems.filter { Calendar.current.isDateInToday($0.date) } }
+    private var openTodayAgenda: [AgendaItem] { todayAgenda.filter { !$0.isCompleted } }
 
     var body: some View {
         ScrollView(.vertical) {
             VStack(spacing: Theme.Spacing.medium) {
-                NetWorthCardView(
-                    totalNetWorth: totalNetWorth,
-                    wallets: activeWallets,
-                    monthlyTransactions: monthlyTransactions,
-                    transactionCount: transactions.count,
-                    isExpanded: expandedCard == .netWorth
-                ) { toggleCard(.netWorth) }
+                NetWorthCardView(totalNetWorth: totalNetWorth, wallets: activeWallets, monthlyTransactions: monthlyTransactions, transactionCount: transactions.count, isExpanded: expandedCard == .netWorth) { toggleCard(.netWorth) }
 
-                TodayCardView(
-                    transactions: todayTransactions,
-                    isExpanded: expandedCard == .today
-                ) { toggleCard(.today) } onSelectTransaction: { transaction in
+                TodayCardView(transactions: todayTransactions, isExpanded: expandedCard == .today) { toggleCard(.today) } onSelectTransaction: { transaction in
                     selectedTransaction = transaction
                 } onShowAll: {
                     showingTransactions = true
                 }
 
-                WalletsCardView(
-                    wallets: activeWallets,
-                    isExpanded: expandedCard == .wallets
-                ) { toggleCard(.wallets) } onAddWallet: {
-                    showingAddWallet = true
-                } onSelectWallet: { wallet in
-                    selectedWallet = wallet
+                Button {
+                    showingAgenda = true
+                } label: {
+                    AureaCard(title: "Agenda", icon: "calendar.badge.clock") {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                if openTodayAgenda.isEmpty {
+                                    Text("Nessun impegno oggi")
+                                        .foregroundStyle(Theme.Colors.secondaryText)
+                                } else {
+                                    Text("\(openTodayAgenda.count) \(openTodayAgenda.count == 1 ? "impegno" : "impegni") oggi")
+                                        .fontWeight(.medium)
+                                    if let next = openTodayAgenda.sorted(by: { $0.date < $1.date }).first {
+                                        Text(next.hasTime ? "Prossimo: \(next.title) alle \(next.date.formatted(date: .omitted, time: .shortened))" : "Prossimo: \(next.title)")
+                                            .font(.caption)
+                                            .foregroundStyle(Theme.Colors.secondaryText)
+                                            .lineLimit(1)
+                                    }
+                                }
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(Theme.Colors.secondaryText)
+                        }
+                    }
                 }
+                .buttonStyle(.plain)
 
-                GoalsCardView(
-                    goals: goals,
-                    isExpanded: expandedCard == .goals
-                ) { toggleCard(.goals) } onAddGoal: {
-                    showingAddGoal = true
-                } onSelectGoal: { goal in
-                    selectedGoal = goal
-                }
+                WalletsCardView(wallets: activeWallets, isExpanded: expandedCard == .wallets) { toggleCard(.wallets) } onAddWallet: { showingAddWallet = true } onSelectWallet: { selectedWallet = $0 }
 
-                RelationshipsCardView(
-                    relationships: relationships,
-                    isExpanded: expandedCard == .relationships
-                ) { toggleCard(.relationships) } onAddRelationship: {
-                    showingAddRelationship = true
-                } onSelectRelationship: { relationship in
-                    selectedRelationship = relationship
-                }
+                GoalsCardView(goals: goals, isExpanded: expandedCard == .goals) { toggleCard(.goals) } onAddGoal: { showingAddGoal = true } onSelectGoal: { selectedGoal = $0 }
+
+                RelationshipsCardView(relationships: relationships, isExpanded: expandedCard == .relationships) { toggleCard(.relationships) } onAddRelationship: { showingAddRelationship = true } onSelectRelationship: { selectedRelationship = $0 }
 
                 Button {
                     showingFinanceCenter = true
                 } label: {
                     HStack {
-                        Label("Strumenti finanziari", systemImage: "chart.pie")
-                            .fontWeight(.medium)
+                        Label("Strumenti finanziari", systemImage: "chart.pie").fontWeight(.medium)
                         Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
+                        Image(systemName: "chevron.right").font(.caption)
                     }
                     .padding()
                     .background(.regularMaterial)
@@ -97,8 +89,7 @@ struct ContentView: View {
                 }
                 .buttonStyle(.plain)
 
-                Color.clear
-                    .frame(height: expandedCard == nil ? 70 : 24)
+                Color.clear.frame(height: expandedCard == nil ? 70 : 24)
             }
             .id(expandedCard)
             .frame(maxWidth: .infinity)
@@ -110,17 +101,13 @@ struct ContentView: View {
         .background(Theme.Colors.background.ignoresSafeArea())
         .safeAreaInset(edge: .bottom) {
             if expandedCard == nil {
-                Button {
-                    showingQuickAdd = true
-                } label: {
+                Button { showingQuickAdd = true } label: {
                     Image(systemName: "plus")
                         .font(.title2.weight(.medium))
                         .frame(width: 54, height: 54)
                         .background(.regularMaterial)
                         .clipShape(Circle())
-                        .overlay {
-                            Circle().strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
-                        }
+                        .overlay { Circle().strokeBorder(Color.primary.opacity(0.1), lineWidth: 1) }
                 }
                 .buttonStyle(.plain)
                 .padding(.bottom, 8)
@@ -134,19 +121,16 @@ struct ContentView: View {
         .sheet(isPresented: $showingAddGoal) { AddGoalView() }
         .sheet(isPresented: $showingTransactions) { TransactionsView() }
         .sheet(isPresented: $showingFinanceCenter) { FinanceCenterView() }
-        .sheet(item: $selectedRelationship) { relationship in RelationshipDetailView(relationship: relationship) }
-        .sheet(item: $selectedGoal) { goal in GoalDetailView(goal: goal) }
-        .sheet(item: $selectedWallet) { wallet in WalletDetailView(wallet: wallet) }
-        .sheet(item: $selectedTransaction) { transaction in TransactionDetailView(transaction: transaction) }
+        .sheet(isPresented: $showingAgenda) { AgendaView() }
+        .sheet(item: $selectedRelationship) { RelationshipDetailView(relationship: $0) }
+        .sheet(item: $selectedGoal) { GoalDetailView(goal: $0) }
+        .sheet(item: $selectedWallet) { WalletDetailView(wallet: $0) }
+        .sheet(item: $selectedTransaction) { TransactionDetailView(transaction: $0) }
     }
 
     private func toggleCard(_ card: HomeCard) {
-        withAnimation(Theme.Animation.standard) {
-            expandedCard = expandedCard == card ? nil : card
-        }
+        withAnimation(Theme.Animation.standard) { expandedCard = expandedCard == card ? nil : card }
     }
 }
 
-#Preview {
-    ContentView()
-}
+#Preview { ContentView() }
