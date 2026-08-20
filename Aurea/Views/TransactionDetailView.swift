@@ -4,6 +4,7 @@ import SwiftData
 struct TransactionDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Query private var allTransactions: [Transaction]
 
     let transaction: Transaction
 
@@ -22,11 +23,7 @@ struct TransactionDetailView: View {
                     LabeledContent("Categoria", value: transaction.category)
                     LabeledContent("Tipo", value: typeTitle)
                     LabeledContent("Importo", value: signedAmount)
-                    LabeledContent(
-                        "Data",
-                        value: transaction.date.formatted(date: .abbreviated, time: .shortened)
-                    )
-
+                    LabeledContent("Data", value: transaction.date.formatted(date: .abbreviated, time: .shortened))
                     if let wallet = transaction.wallet {
                         LabeledContent("Portafoglio", value: wallet.name)
                     }
@@ -34,26 +31,29 @@ struct TransactionDetailView: View {
 
                 if isTransfer {
                     Section {
-                        Label(
-                            "Questo movimento fa parte di un trasferimento tra portafogli.",
-                            systemImage: "arrow.left.arrow.right"
-                        )
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        Label("Questo movimento fa parte di un trasferimento tra portafogli.", systemImage: "arrow.left.arrow.right")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if transaction.transferGroupID != nil {
+                        Section {
+                            Button(role: .destructive) {
+                                showingDeleteConfirmation = true
+                            } label: {
+                                Label("Elimina trasferimento", systemImage: "trash")
+                            }
+                        }
                     }
                 } else {
                     Section {
-                        Button {
-                            showingEdit = true
-                        } label: {
+                        Button { showingEdit = true } label: {
                             Label("Modifica movimento", systemImage: "pencil")
                         }
                     }
 
                     Section {
-                        Button(role: .destructive) {
-                            showingDeleteConfirmation = true
-                        } label: {
+                        Button(role: .destructive) { showingDeleteConfirmation = true } label: {
                             Label("Elimina movimento", systemImage: "trash")
                         }
                     }
@@ -62,30 +62,31 @@ struct TransactionDetailView: View {
             .navigationTitle("Dettaglio movimento")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Chiudi") { dismiss() }
-                }
+                ToolbarItem(placement: .cancellationAction) { Button("Chiudi") { dismiss() } }
             }
             .sheet(isPresented: $showingEdit) {
                 EditTransactionView(transaction: transaction)
             }
-            .confirmationDialog(
-                "Eliminare questo movimento?",
-                isPresented: $showingDeleteConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Elimina", role: .destructive) {
-                    modelContext.delete(transaction)
-                    dismiss()
-                }
+            .confirmationDialog(isTransfer ? "Eliminare l’intero trasferimento?" : "Eliminare questo movimento?", isPresented: $showingDeleteConfirmation, titleVisibility: .visible) {
+                Button("Elimina", role: .destructive) { deleteMovement() }
                 Button("Annulla", role: .cancel) { }
             }
         }
     }
 
+    private func deleteMovement() {
+        if isTransfer, let groupID = transaction.transferGroupID {
+            for item in allTransactions where item.transferGroupID == groupID {
+                modelContext.delete(item)
+            }
+        } else {
+            modelContext.delete(transaction)
+        }
+        dismiss()
+    }
+
     private var typeTitle: String {
         if isTransfer { return "Trasferimento" }
-
         switch transaction.type {
         case .expense: return "Spesa"
         case .income: return "Entrata"
@@ -96,11 +97,6 @@ struct TransactionDetailView: View {
     private var signedAmount: String {
         let code = transaction.wallet?.currencyCode ?? "EUR"
         let amount = transaction.amount.formatted(.currency(code: code))
-
-        if isTransfer {
-            return transaction.type == .expense ? "−\(amount)" : "+\(amount)"
-        }
-
         switch transaction.type {
         case .expense: return "−\(amount)"
         case .income: return "+\(amount)"
@@ -156,17 +152,15 @@ private struct EditTransactionView: View {
 
                 Section("Movimento") {
                     TextField("Titolo", text: $title)
-                    TextField("Importo", text: $amount)
-                        .keyboardType(.decimalPad)
+                    TextField("Importo", text: $amount).keyboardType(.decimalPad)
                     TextField("Categoria", text: $category)
                     DatePicker("Data", selection: $date)
                 }
 
                 Section("Portafoglio") {
                     Picker("Portafoglio", selection: $selectedWallet) {
-                        ForEach(wallets) { wallet in
-                            Label(wallet.name, systemImage: wallet.icon)
-                                .tag(wallet as Wallet?)
+                        ForEach(wallets.filter { !$0.isArchived }) { wallet in
+                            Label(wallet.name, systemImage: wallet.icon).tag(wallet as Wallet?)
                         }
                     }
                 }
@@ -174,24 +168,16 @@ private struct EditTransactionView: View {
             .navigationTitle("Modifica movimento")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Annulla") { dismiss() }
-                }
-
+                ToolbarItem(placement: .cancellationAction) { Button("Annulla") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Salva") {
-                        save()
-                    }
-                    .disabled(!canSave)
+                    Button("Salva") { save() }.disabled(!canSave)
                 }
             }
         }
     }
 
     private func save() {
-        guard let parsedAmount,
-              let selectedWallet else { return }
-
+        guard let parsedAmount, let selectedWallet else { return }
         transaction.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         transaction.amount = parsedAmount
         transaction.category = category.trimmingCharacters(in: .whitespacesAndNewlines)
