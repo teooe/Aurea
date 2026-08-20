@@ -119,6 +119,12 @@ struct QuickAddView: View {
                                     Label(wallet.name, systemImage: wallet.icon).tag(wallet as Wallet?)
                                 }
                             }
+
+                            if let converted = convertedDestinationAmount,
+                               let destinationWallet,
+                               selectedWallet?.currencyCode != destinationWallet.currencyCode {
+                                LabeledContent("Arriveranno", value: converted.formatted(.currency(code: destinationWallet.currencyCode)))
+                            }
                         }
                     }
                 } else {
@@ -160,6 +166,14 @@ struct QuickAddView: View {
 
     private var parsedAmount: Decimal? { Decimal(string: amount.replacingOccurrences(of: ",", with: ".")) }
 
+    private var convertedDestinationAmount: Decimal? {
+        guard let amount = parsedAmount,
+              let source = selectedWallet,
+              let destination = destinationWallet else { return nil }
+        let valueInEUR = amount * source.effectiveExchangeRateToEUR
+        return valueInEUR / destination.effectiveExchangeRateToEUR
+    }
+
     private var canSave: Bool {
         let baseValid = !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (parsedAmount ?? 0) > 0 && selectedWallet != nil
         if type == .transfer {
@@ -171,7 +185,8 @@ struct QuickAddView: View {
     private var confirmationText: String {
         let amountText = parsedAmount?.formatted(.currency(code: selectedWallet?.currencyCode ?? "EUR")) ?? ""
         if type == .transfer {
-            return "Trasferimento: \(title) • \(amountText) • da \(selectedWallet?.name ?? "") a \(destinationWallet?.name ?? "")"
+            let destinationText = convertedDestinationAmount?.formatted(.currency(code: destinationWallet?.currencyCode ?? "EUR")) ?? ""
+            return "Trasferimento: \(title) • \(amountText) da \(selectedWallet?.name ?? "") • \(destinationText) a \(destinationWallet?.name ?? "")"
         }
         return "\(type == .expense ? "Spesa" : "Entrata"): \(title) • \(amountText) • \(category)"
     }
@@ -181,10 +196,11 @@ struct QuickAddView: View {
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if type == .transfer {
-            guard let destinationWallet, destinationWallet !== wallet else { return }
+            guard let destinationWallet, destinationWallet !== wallet,
+                  let destinationAmount = convertedDestinationAmount else { return }
             let groupID = UUID()
             let outgoing = Transaction(type: .expense, amount: decimalAmount, category: "Trasferimento", title: "\(cleanTitle) → \(destinationWallet.name)", wallet: wallet, transferGroupID: groupID)
-            let incoming = Transaction(type: .income, amount: decimalAmount, category: "Trasferimento", title: "\(cleanTitle) ← \(wallet.name)", wallet: destinationWallet, transferGroupID: groupID)
+            let incoming = Transaction(type: .income, amount: destinationAmount, category: "Trasferimento", title: "\(cleanTitle) ← \(wallet.name)", wallet: destinationWallet, transferGroupID: groupID)
             modelContext.insert(outgoing)
             modelContext.insert(incoming)
         } else {
