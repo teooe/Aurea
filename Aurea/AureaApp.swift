@@ -15,6 +15,7 @@ struct AureaApp: App {
             Wallet.self,
             Transaction.self,
             Relationship.self,
+            RelationshipPayment.self,
             Goal.self,
             FinanceCategory.self,
             Budget.self,
