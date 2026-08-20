@@ -12,21 +12,16 @@ struct AgendaView: View {
         items.filter { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) }
     }
 
+    private var activeDayItems: [AgendaItem] { dayItems.filter { !$0.isCompleted } }
+    private var completedDayItems: [AgendaItem] { dayItems.filter { $0.isCompleted } }
+
     private var upcomingItems: [AgendaItem] {
-        items
-            .filter {
-                $0.date > Calendar.current.startOfDay(for: selectedDate) &&
-                !Calendar.current.isDate($0.date, inSameDayAs: selectedDate) &&
-                !$0.isCompleted
-            }
-            .prefix(8)
-            .map { $0 }
+        items.filter { $0.date > Calendar.current.endOfDay(for: selectedDate) && !$0.isCompleted }
+            .prefix(8).map { $0 }
     }
 
     private var selectedDayTitle: String {
-        Calendar.current.isDateInToday(selectedDate)
-            ? "Oggi"
-            : selectedDate.formatted(date: .complete, time: .omitted)
+        Calendar.current.isDateInToday(selectedDate) ? "Oggi" : selectedDate.formatted(date: .complete, time: .omitted)
     }
 
     var body: some View {
@@ -38,53 +33,49 @@ struct AgendaView: View {
                 }
 
                 Section {
-                    if dayItems.isEmpty {
-                        ContentUnavailableView(
-                            "Nessun impegno",
-                            systemImage: "calendar.badge.checkmark",
-                            description: Text("La giornata è libera.")
-                        )
+                    if activeDayItems.isEmpty {
+                        ContentUnavailableView("Nessun impegno", systemImage: "calendar.badge.checkmark", description: Text("Non ci sono attività aperte per questa giornata."))
                     } else {
-                        ForEach(dayItems) { item in
-                            agendaRow(item)
-                        }
+                        ForEach(activeDayItems) { agendaRow($0) }
                     }
                 } header: {
                     Text(selectedDayTitle)
                 }
 
+                if !completedDayItems.isEmpty {
+                    Section {
+                        ForEach(completedDayItems) { agendaRow($0) }
+                    } header: {
+                        Text("Completati")
+                    }
+                }
+
                 if Calendar.current.isDateInToday(selectedDate) && !upcomingItems.isEmpty {
-                    Section("Prossimamente") {
-                        ForEach(upcomingItems) { item in
-                            agendaRow(item)
-                        }
+                    Section {
+                        ForEach(upcomingItems) { agendaRow($0) }
+                    } header: {
+                        Text("Prossimamente")
                     }
                 }
             }
             .navigationTitle("Agenda")
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Chiudi") { dismiss() }
-                }
+                ToolbarItem(placement: .cancellationAction) { Button("Chiudi") { dismiss() } }
                 ToolbarItem(placement: .primaryAction) {
-                    Button { showingAdd = true } label: {
-                        Image(systemName: "plus")
-                    }
+                    Button { showingAdd = true } label: { Image(systemName: "plus") }
                 }
             }
-            .sheet(isPresented: $showingAdd) {
-                AddAgendaItemView(defaultDate: selectedDate)
-            }
-            .sheet(item: $selectedItem) { item in
-                AgendaItemDetailView(item: item)
+            .sheet(isPresented: $showingAdd) { AddAgendaItemView(defaultDate: selectedDate) }
+            .sheet(item: $selectedItem) { AgendaItemDetailView(item: $0) }
+            .onAppear {
+                AgendaNotificationManager.requestAuthorization()
+                normalizeRecurringEvents()
             }
         }
     }
 
     private func agendaRow(_ item: AgendaItem) -> some View {
-        Button {
-            selectedItem = item
-        } label: {
+        Button { selectedItem = item } label: {
             HStack(spacing: 12) {
                 Image(systemName: item.isCompleted ? "checkmark.circle.fill" : item.type.icon)
                     .font(.title3)
@@ -102,30 +93,34 @@ struct AgendaView: View {
                             Text("•")
                             Text(item.date.formatted(date: .omitted, time: .shortened))
                         }
-                        if item.repeatRule != .never {
-                            Image(systemName: "repeat")
-                        }
+                        if item.repeatRule != .never { Image(systemName: "repeat") }
+                        if item.reminderMinutesBefore != nil && item.hasTime { Image(systemName: "bell") }
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 }
 
                 Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    private func normalizeRecurringEvents() {
+        for item in items where item.type == .event && item.repeatRule != .never && item.date < Date() {
+            var next = item.date
+            while next < Date() { next = item.repeatRule.nextDate(after: next) }
+            item.date = next
+            AgendaNotificationManager.schedule(for: item)
+        }
     }
 }
 
 struct AddAgendaItemView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-
     let defaultDate: Date
 
     @State private var title = ""
@@ -147,8 +142,7 @@ struct AddAgendaItemView: View {
                 Section("Tipo") {
                     Picker("Tipo", selection: $type) {
                         ForEach(AgendaItemType.allCases) { value in
-                            Label(value.title, systemImage: value.icon)
-                                .tag(value)
+                            Label(value.title, systemImage: value.icon).tag(value)
                         }
                     }
                     .pickerStyle(.segmented)
@@ -157,19 +151,14 @@ struct AddAgendaItemView: View {
                 Section("Dettagli") {
                     TextField("Titolo", text: $title)
                     TextField("Note (opzionale)", text: $note, axis: .vertical)
-                        .lineLimit(2...5)
                     DatePicker("Data", selection: $date, displayedComponents: .date)
                     Toggle("Orario", isOn: $hasTime)
-                    if hasTime {
-                        DatePicker("Ora", selection: $date, displayedComponents: .hourAndMinute)
-                    }
+                    if hasTime { DatePicker("Ora", selection: $date, displayedComponents: .hourAndMinute) }
                 }
 
                 Section("Ripetizione") {
                     Picker("Ripeti", selection: $repeatRule) {
-                        ForEach(AgendaRepeat.allCases) { value in
-                            Text(value.title).tag(value)
-                        }
+                        ForEach(AgendaRepeat.allCases) { Text($0.title).tag($0) }
                     }
                 }
 
@@ -183,44 +172,46 @@ struct AddAgendaItemView: View {
                         Text("1 ora prima").tag(60)
                         Text("1 giorno prima").tag(1440)
                     }
+                    .disabled(!hasTime)
                 } header: {
                     Text("Promemoria")
                 } footer: {
-                    Text("In questa prima versione Aurea salva la preferenza del promemoria. Le notifiche di sistema verranno collegate nel prossimo passaggio.")
+                    Text(hasTime ? "Aurea programmerà una notifica locale sul dispositivo." : "Attiva Orario per impostare un promemoria.")
                 }
             }
             .navigationTitle("Nuovo impegno")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Annulla") { dismiss() }
-                }
+                ToolbarItem(placement: .cancellationAction) { Button("Annulla") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Salva") {
-                        let item = AgendaItem(
-                            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
-                            note: note.trimmingCharacters(in: .whitespacesAndNewlines),
-                            type: type,
-                            date: date,
-                            hasTime: hasTime,
-                            repeatRule: repeatRule,
-                            reminderMinutesBefore: reminder == 0 ? nil : reminder
-                        )
-                        modelContext.insert(item)
-                        dismiss()
-                    }
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button("Salva") { save() }
+                        .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
+    }
+
+    private func save() {
+        let item = AgendaItem(
+            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+            note: note.trimmingCharacters(in: .whitespacesAndNewlines),
+            type: type,
+            date: date,
+            hasTime: hasTime,
+            repeatRule: repeatRule,
+            reminderMinutesBefore: hasTime && reminder != 0 ? reminder : nil
+        )
+        modelContext.insert(item)
+        AgendaNotificationManager.schedule(for: item)
+        dismiss()
     }
 }
 
 struct AgendaItemDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-
     let item: AgendaItem
+    @State private var showingEdit = false
 
     var body: some View {
         NavigationStack {
@@ -228,63 +219,73 @@ struct AgendaItemDetailView: View {
                 Section("Impegno") {
                     LabeledContent("Tipo", value: item.type.title)
                     LabeledContent("Titolo", value: item.title)
-                    LabeledContent(
-                        "Data",
-                        value: item.date.formatted(
-                            date: .long,
-                            time: item.hasTime ? .shortened : .omitted
-                        )
-                    )
+                    LabeledContent("Data", value: item.hasTime ? item.date.formatted(date: .long, time: .shortened) : item.date.formatted(date: .long, time: .omitted))
+                    if !item.note.isEmpty { LabeledContent("Note", value: item.note) }
+                    if item.repeatRule != .never { LabeledContent("Ripetizione", value: item.repeatRule.title) }
+                }
 
-                    if !item.note.isEmpty {
-                        LabeledContent("Note", value: item.note)
-                    }
-
-                    if item.repeatRule != .never {
-                        LabeledContent("Ripetizione", value: item.repeatRule.title)
-                    }
-
-                    if let reminder = item.reminderMinutesBefore {
-                        LabeledContent("Promemoria", value: reminderText(reminder))
-                    }
+                Section {
+                    Button { showingEdit = true } label: { Label("Modifica impegno", systemImage: "pencil") }
                 }
 
                 if item.type == .task || item.type == .deadline {
                     Section {
-                        Button {
-                            item.isCompleted.toggle()
-                        } label: {
-                            Label(
-                                item.isCompleted ? "Segna da fare" : "Segna come completato",
-                                systemImage: item.isCompleted ? "arrow.uturn.backward.circle" : "checkmark.circle"
-                            )
+                        Button { toggleCompletion() } label: {
+                            Label(completionTitle, systemImage: item.isCompleted ? "arrow.uturn.backward.circle" : "checkmark.circle")
                         }
                     }
                 }
 
                 Section {
                     Button(role: .destructive) {
+                        AgendaNotificationManager.remove(for: item)
                         modelContext.delete(item)
                         dismiss()
-                    } label: {
-                        Label("Elimina", systemImage: "trash")
-                    }
+                    } label: { Label("Elimina", systemImage: "trash") }
                 }
             }
             .navigationTitle("Dettaglio")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Chiudi") { dismiss() }
-                }
-            }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Chiudi") { dismiss() } } }
+            .sheet(isPresented: $showingEdit) { EditAgendaItemView(item: item) }
         }
     }
 
-    private func reminderText(_ minutes: Int) -> String {
-        if minutes == 1 { return "All'ora dell'impegno" }
-        if minutes == 60 { return "1 ora prima" }
-        if minutes == 1440 { return "1 giorno prima" }
-        return "\(minutes) minuti prima"
+    private var completionTitle: String {
+        if item.isCompleted { return "Segna da fare" }
+        return item.repeatRule == .never ? "Segna come completato" : "Completa e passa alla prossima"
+    }
+
+    private func toggleCompletion() {
+        if item.isCompleted {
+            item.isCompleted = false
+            AgendaNotificationManager.schedule(for: item)
+        } else if item.repeatRule != .never {
+            item.date = item.repeatRule.nextDate(after: item.date)
+            AgendaNotificationManager.schedule(for: item)
+        } else {
+            item.isCompleted = true
+            AgendaNotificationManager.remove(for: item)
+        }
+    }
+}
+
+extension AgendaRepeat {
+    func nextDate(after date: Date) -> Date {
+        let calendar = Calendar.current
+        switch self {
+        case .never: return date
+        case .daily: return calendar.date(byAdding: .day, value: 1, to: date) ?? date
+        case .weekly: return calendar.date(byAdding: .weekOfYear, value: 1, to: date) ?? date
+        case .monthly: return calendar.date(byAdding: .month, value: 1, to: date) ?? date
+        case .yearly: return calendar.date(byAdding: .year, value: 1, to: date) ?? date
+        }
+    }
+}
+
+private extension Calendar {
+    func endOfDay(for date: Date) -> Date {
+        let start = startOfDay(for: date)
+        return self.date(byAdding: .day, value: 1, to: start)?.addingTimeInterval(-1) ?? start
     }
 }
