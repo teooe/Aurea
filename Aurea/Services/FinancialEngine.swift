@@ -7,20 +7,22 @@ enum FinancialEngine {
             switch transaction.type {
             case .income:
                 return balance + transaction.amount
-
             case .expense:
                 return balance - transaction.amount
-
             case .transfer:
                 return balance
             }
         }
     }
 
+    static func balanceInEUR(for wallet: Wallet) -> Decimal {
+        balance(for: wallet) * wallet.effectiveExchangeRateToEUR
+    }
+
     static func netWorth(wallets: [Wallet]) -> Decimal {
-        wallets.reduce(0) { total, wallet in
-            total + balance(for: wallet)
-        }
+        wallets
+            .filter { !$0.isArchived }
+            .reduce(0) { $0 + balanceInEUR(for: $1) }
     }
 
     static func totalIncome(from transactions: [Transaction]) -> Decimal {
@@ -37,5 +39,16 @@ enum FinancialEngine {
 
     static func cashFlow(from transactions: [Transaction]) -> Decimal {
         totalIncome(from: transactions) - totalExpenses(from: transactions)
+    }
+
+    static func spentThisMonth(for budget: Budget, transactions: [Transaction], calendar: Calendar = .current) -> Decimal {
+        let monthTransactions = transactions.filter { calendar.isDate($0.date, equalTo: .now, toGranularity: .month) }
+        return monthTransactions
+            .filter { transaction in
+                transaction.type == .expense &&
+                transaction.category != "Trasferimento" &&
+                (budget.category == nil || transaction.category == budget.category)
+            }
+            .reduce(Decimal.zero) { $0 + $1.amount }
     }
 }
