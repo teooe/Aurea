@@ -6,6 +6,8 @@ struct QuickAddView: View {
     @Environment(\.dismiss) private var dismiss
 
     @Query private var wallets: [Wallet]
+    @Query(sort: \Transaction.date, order: .reverse)
+    private var transactions: [Transaction]
 
     @State private var type: TransactionType = .expense
     @State private var title = ""
@@ -34,6 +36,25 @@ struct QuickAddView: View {
         }
     }
 
+    private var recentCategories: [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+
+        for transaction in transactions where transaction.type == type {
+            let value = transaction.category.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty,
+                  value != "Trasferimento",
+                  !seen.contains(value) else { continue }
+
+            seen.insert(value)
+            result.append(value)
+
+            if result.count == 3 { break }
+        }
+
+        return result
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -58,6 +79,7 @@ struct QuickAddView: View {
 
                 Section("Movimento") {
                     TextField("Titolo", text: $title)
+                        .textInputAutocapitalization(.sentences)
 
                     TextField("Importo", text: $amount)
                         .keyboardType(.decimalPad)
@@ -65,14 +87,40 @@ struct QuickAddView: View {
                     if type != .transfer {
                         TextField("Categoria", text: $category)
 
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(suggestedCategories, id: \.self) { suggestion in
-                                    Button(suggestion) {
-                                        category = suggestion
+                        if !recentCategories.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Usate di recente")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 8) {
+                                        ForEach(recentCategories, id: \.self) { suggestion in
+                                            Button(suggestion) {
+                                                category = suggestion
+                                            }
+                                            .buttonStyle(.borderedProminent)
+                                            .controlSize(.small)
+                                        }
                                     }
-                                    .buttonStyle(.bordered)
-                                    .controlSize(.small)
+                                }
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Categorie")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(suggestedCategories, id: \.self) { suggestion in
+                                        Button(suggestion) {
+                                            category = suggestion
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .controlSize(.small)
+                                    }
                                 }
                             }
                         }
