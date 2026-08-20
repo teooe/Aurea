@@ -15,6 +15,7 @@ struct ContentView: View {
     @State private var showingAddWallet = false
     @State private var showingAddRelationship = false
     @State private var showingAddGoal = false
+    @State private var showingTransactions = false
     @State private var selectedRelationship: Relationship?
     @State private var selectedGoal: Goal?
     @State private var selectedWallet: Wallet?
@@ -53,6 +54,8 @@ struct ContentView: View {
                     toggleCard(.today)
                 } onSelectTransaction: { transaction in
                     selectedTransaction = transaction
+                } onShowAll: {
+                    showingTransactions = true
                 }
                 
                 WalletsCardView(
@@ -134,6 +137,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingAddGoal) {
             AddGoalView()
+        }
+        .sheet(isPresented: $showingTransactions) {
+            TransactionsView()
         }
         .sheet(item: $selectedRelationship) { relationship in
             RelationshipDetailView(relationship: relationship)
