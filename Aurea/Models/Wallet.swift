@@ -7,7 +7,9 @@ final class Wallet {
     var icon: String
     var currencyCode: String
     var initialBalance: Decimal
-    
+    var exchangeRateToEUR: Decimal?
+    var isArchived: Bool
+
     @Relationship(deleteRule: .cascade, inverse: \Transaction.wallet)
     var transactions: [Transaction] = []
 
@@ -15,12 +17,20 @@ final class Wallet {
         name: String,
         icon: String,
         currencyCode: String = "EUR",
-        initialBalance: Decimal = 0
+        initialBalance: Decimal = 0,
+        exchangeRateToEUR: Decimal? = nil,
+        isArchived: Bool = false
     ) {
         self.name = name
         self.icon = icon
         self.currencyCode = currencyCode
         self.initialBalance = initialBalance
+        self.exchangeRateToEUR = exchangeRateToEUR
+        self.isArchived = isArchived
     }
-    
+
+    var effectiveExchangeRateToEUR: Decimal {
+        if currencyCode == "EUR" { return 1 }
+        return exchangeRateToEUR ?? 1
+    }
 }
