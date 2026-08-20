@@ -8,7 +8,7 @@ struct AureaAssistantView: View {
 
     @State private var text = ""
     @State private var messages: [AssistantMessage] = [
-        AssistantMessage(role: .assistant, text: "Ciao. Posso già leggere i dati di Aurea e aiutarti a capire finanze e agenda.")
+        AssistantMessage(role: .assistant, text: "Ciao. Posso leggere i dati di Aurea e aiutarti con finanze e agenda.")
     ]
 
     private var activeWallets: [Wallet] { wallets.filter { !$0.isArchived } }
@@ -19,10 +19,7 @@ struct AureaAssistantView: View {
                 ScrollView {
                     LazyVStack(spacing: 12) {
                         quickOverview
-
-                        ForEach(messages) { message in
-                            messageBubble(message)
-                        }
+                        ForEach(messages) { message in messageBubble(message) }
                     }
                     .padding()
                 }
@@ -37,8 +34,7 @@ struct AureaAssistantView: View {
                         .onSubmit(send)
 
                     Button(action: send) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.title2)
+                        Image(systemName: "arrow.up.circle.fill").font(.title2)
                     }
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
@@ -52,10 +48,9 @@ struct AureaAssistantView: View {
                         Button("Quanto ho speso questo mese?") { ask("Quanto ho speso questo mese?") }
                         Button("Quanto ho guadagnato questo mese?") { ask("Quanto ho guadagnato questo mese?") }
                         Button("Qual è il mio patrimonio?") { ask("Qual è il mio patrimonio?") }
+                        Button("Quanto ho speso oggi?") { ask("Quanto ho speso oggi?") }
                         Button("Cosa ho in agenda?") { ask("Cosa ho in agenda?") }
-                    } label: {
-                        Image(systemName: "lightbulb")
-                    }
+                    } label: { Image(systemName: "lightbulb") }
                 }
             }
         }
@@ -63,12 +58,7 @@ struct AureaAssistantView: View {
 
     private var quickOverview: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Image(systemName: "sparkles")
-                Text("Panoramica")
-                    .fontWeight(.semibold)
-            }
-
+            HStack { Image(systemName: "sparkles"); Text("Panoramica").fontWeight(.semibold) }
             HStack(spacing: 12) {
                 overviewMetric("Patrimonio", value: FinancialEngine.netWorth(wallets: activeWallets).formatted(.currency(code: "EUR")))
                 overviewMetric("Spese mese", value: monthExpenses.formatted(.currency(code: "EUR")))
@@ -81,13 +71,8 @@ struct AureaAssistantView: View {
 
     private func overviewMetric(_ title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.headline)
-                .minimumScaleFactor(0.7)
-                .lineLimit(1)
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            Text(value).font(.headline).minimumScaleFactor(0.7).lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -95,14 +80,12 @@ struct AureaAssistantView: View {
     private func messageBubble(_ message: AssistantMessage) -> some View {
         HStack {
             if message.role == .user { Spacer(minLength: 48) }
-
             Text(message.text)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .background(message.role == .user ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.10))
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .frame(maxWidth: 320, alignment: message.role == .user ? .trailing : .leading)
-
             if message.role == .assistant { Spacer(minLength: 48) }
         }
     }
@@ -120,38 +103,46 @@ struct AureaAssistantView: View {
     }
 
     private func answer(to question: String) -> String {
-        let q = question.lowercased()
+        let q = normalized(question)
 
-        if q.contains("patrimonio") || q.contains("saldo totale") || q.contains("quanto ho") {
-            let value = FinancialEngine.netWorth(wallets: activeWallets)
-            return "Il tuo patrimonio attuale è \(value.formatted(.currency(code: "EUR")))."
+        // Importante: controlliamo prima gli intenti specifici. In precedenza
+        // "quanto ho speso..." veniva catturato dal generico "quanto ho".
+        if containsAny(q, ["spes", "speso", "spendo", "uscit"]) && containsAny(q, ["oggi", "giorno"]) {
+            return "Oggi hai speso \(todayExpenses.formatted(.currency(code: "EUR")))."
         }
 
-        if q.contains("spes") && (q.contains("mese") || q.contains("mensil")) {
+        if containsAny(q, ["spes", "speso", "spendo", "uscit"]) && containsAny(q, ["mese", "mensil", "questo mese"]) {
             return "Questo mese hai speso \(monthExpenses.formatted(.currency(code: "EUR")))."
         }
 
-        if (q.contains("guadagn") || q.contains("entrat")) && (q.contains("mese") || q.contains("mensil")) {
+        if containsAny(q, ["guadagn", "entrat", "incass"]) && containsAny(q, ["mese", "mensil", "questo mese"]) {
             return "Questo mese hai registrato \(monthIncome.formatted(.currency(code: "EUR"))) di entrate."
         }
 
-        if q.contains("agenda") || q.contains("impegn") || q.contains("prossim") {
+        if containsAny(q, ["agenda", "impegn", "appuntament", "scadenz", "prossim", "cosa devo fare"]) {
             let upcoming = upcomingAgenda
             guard !upcoming.isEmpty else { return "Non hai impegni aperti nei prossimi giorni." }
             let preview = upcoming.prefix(3).map { item in
-                let when = item.hasTime
-                    ? item.date.formatted(date: .abbreviated, time: .shortened)
-                    : item.date.formatted(date: .abbreviated, time: .omitted)
+                let when = item.hasTime ? item.date.formatted(date: .abbreviated, time: .shortened) : item.date.formatted(date: .abbreviated, time: .omitted)
                 return "\(item.title) – \(when)"
             }.joined(separator: "; ")
             return "I prossimi impegni sono: \(preview)."
         }
 
-        if q.contains("oggi") && q.contains("spes") {
-            return "Oggi hai speso \(todayExpenses.formatted(.currency(code: "EUR")))."
+        if containsAny(q, ["patrimonio", "saldo totale", "soldi totali", "quanto possiedo", "disponibilita totale"]) {
+            let value = FinancialEngine.netWorth(wallets: activeWallets)
+            return "Il tuo patrimonio attuale è \(value.formatted(.currency(code: "EUR")))."
         }
 
-        return "Per ora posso rispondere a domande su patrimonio, spese ed entrate del mese, spese di oggi e prossimi impegni. La parte AI più avanzata arriverà nel prossimo blocco."
+        return "Posso già rispondere a domande come: quanto hai speso oggi o questo mese, quanto hai guadagnato questo mese, qual è il tuo patrimonio e quali sono i prossimi impegni."
+    }
+
+    private func normalized(_ value: String) -> String {
+        value.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).lowercased()
+    }
+
+    private func containsAny(_ text: String, _ terms: [String]) -> Bool {
+        terms.contains { text.contains($0) }
     }
 
     private var currentMonthTransactions: [Transaction] {
@@ -161,25 +152,19 @@ struct AureaAssistantView: View {
     private var monthExpenses: Decimal {
         currentMonthTransactions
             .filter { $0.type == .expense && $0.category != "Trasferimento" }
-            .reduce(Decimal.zero) { partial, transaction in
-                partial + transaction.amount * (transaction.wallet?.effectiveExchangeRateToEUR ?? 1)
-            }
+            .reduce(Decimal.zero) { $0 + $1.amount * ($1.wallet?.effectiveExchangeRateToEUR ?? 1) }
     }
 
     private var monthIncome: Decimal {
         currentMonthTransactions
             .filter { $0.type == .income && $0.category != "Trasferimento" }
-            .reduce(Decimal.zero) { partial, transaction in
-                partial + transaction.amount * (transaction.wallet?.effectiveExchangeRateToEUR ?? 1)
-            }
+            .reduce(Decimal.zero) { $0 + $1.amount * ($1.wallet?.effectiveExchangeRateToEUR ?? 1) }
     }
 
     private var todayExpenses: Decimal {
         transactions
             .filter { Calendar.current.isDateInToday($0.date) && $0.type == .expense && $0.category != "Trasferimento" }
-            .reduce(Decimal.zero) { partial, transaction in
-                partial + transaction.amount * (transaction.wallet?.effectiveExchangeRateToEUR ?? 1)
-            }
+            .reduce(Decimal.zero) { $0 + $1.amount * ($1.wallet?.effectiveExchangeRateToEUR ?? 1) }
     }
 
     private var upcomingAgenda: [AgendaItem] {
