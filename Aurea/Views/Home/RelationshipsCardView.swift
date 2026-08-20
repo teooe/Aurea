@@ -6,6 +6,7 @@ struct RelationshipsCardView: View {
     let isExpanded: Bool
     let onTap: () -> Void
     let onAddRelationship: () -> Void
+    let onSelectRelationship: (Relationship) -> Void
 
     private var openRelationships: [Relationship] {
         relationships.filter { !$0.isClosed }
@@ -28,51 +29,63 @@ struct RelationshipsCardView: View {
     }
 
     var body: some View {
-        Button {
-            onTap()
-        } label: {
-            AureaCard(
-                title: "Debiti e Crediti",
-                icon: "arrow.left.arrow.right"
-            ) {
-                VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-                    if openRelationships.isEmpty {
-                        Text("Nessuna relazione economica")
-                            .foregroundStyle(Theme.Colors.secondaryText)
-                    } else {
-                        HStack(spacing: Theme.Spacing.medium) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Debiti")
-                                    .font(.caption)
+        AureaCard(
+            title: "Debiti e Crediti",
+            icon: "arrow.left.arrow.right"
+        ) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
+                Button {
+                    onTap()
+                } label: {
+                    Group {
+                        if openRelationships.isEmpty {
+                            HStack {
+                                Text("Nessuna relazione economica")
                                     .foregroundStyle(Theme.Colors.secondaryText)
-
-                                Text(totalDebts, format: .currency(code: "EUR"))
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(.red)
+                                Spacer()
                             }
+                        } else {
+                            HStack(spacing: Theme.Spacing.medium) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Debiti")
+                                        .font(.caption)
+                                        .foregroundStyle(Theme.Colors.secondaryText)
 
-                            Spacer()
+                                    Text(totalDebts, format: .currency(code: "EUR"))
+                                        .fontWeight(.semibold)
+                                        .foregroundStyle(.red)
+                                }
 
-                            VStack(alignment: .trailing, spacing: 4) {
-                                Text("Crediti")
-                                    .font(.caption)
-                                    .foregroundStyle(Theme.Colors.secondaryText)
+                                Spacer()
 
-                                Text(totalCredits, format: .currency(code: "EUR"))
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(.green)
+                                VStack(alignment: .trailing, spacing: 4) {
+                                    Text("Crediti")
+                                        .font(.caption)
+                                        .foregroundStyle(Theme.Colors.secondaryText)
+
+                                    Text(totalCredits, format: .currency(code: "EUR"))
+                                        .fontWeight(.semibold)
+                                        .foregroundStyle(.green)
+                                }
                             }
                         }
                     }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
 
-                    if isExpanded {
-                        if !openRelationships.isEmpty {
-                            VStack(spacing: Theme.Spacing.small) {
-                                ForEach(openRelationships) { relationship in
+                if isExpanded {
+                    if !openRelationships.isEmpty {
+                        VStack(spacing: Theme.Spacing.small) {
+                            ForEach(openRelationships) { relationship in
+                                Button {
+                                    onSelectRelationship(relationship)
+                                } label: {
                                     HStack {
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text(relationship.personName)
                                                 .fontWeight(.medium)
+                                                .foregroundStyle(.primary)
 
                                             if !relationship.note.isEmpty {
                                                 Text(relationship.note)
@@ -92,25 +105,30 @@ struct RelationshipsCardView: View {
                                         .foregroundStyle(
                                             relationship.type == .debt ? .red : .green
                                         )
-                                    }
-                                }
-                            }
-                            .transition(.opacity)
-                        }
 
-                        Button {
-                            onAddRelationship()
-                        } label: {
-                            Label(
-                                "Aggiungi debito o credito",
-                                systemImage: "plus"
-                            )
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption)
+                                            .foregroundStyle(Theme.Colors.secondaryText)
+                                    }
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
                         .transition(.opacity)
                     }
+
+                    Button {
+                        onAddRelationship()
+                    } label: {
+                        Label(
+                            "Aggiungi debito o credito",
+                            systemImage: "plus"
+                        )
+                    }
+                    .transition(.opacity)
                 }
             }
         }
-        .buttonStyle(.plain)
     }
 }
