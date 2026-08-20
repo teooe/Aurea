@@ -173,7 +173,7 @@ struct AddAgendaItemView: View {
                     }
                 }
 
-                Section("Promemoria") {
+                Section {
                     Picker("Avviso", selection: $reminder) {
                         Text("Nessuno").tag(0)
                         Text("All'ora dell'impegno").tag(1)
@@ -183,6 +183,8 @@ struct AddAgendaItemView: View {
                         Text("1 ora prima").tag(60)
                         Text("1 giorno prima").tag(1440)
                     }
+                } header: {
+                    Text("Promemoria")
                 } footer: {
                     Text("In questa prima versione Aurea salva la preferenza del promemoria. Le notifiche di sistema verranno collegate nel prossimo passaggio.")
                 }
