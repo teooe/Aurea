@@ -20,6 +20,7 @@ struct AureaApp: App {
             FinanceCategory.self,
             Budget.self,
             RecurringTransaction.self,
+            AgendaItem.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
