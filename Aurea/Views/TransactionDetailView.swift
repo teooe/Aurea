@@ -8,6 +8,7 @@ struct TransactionDetailView: View {
     let transaction: Transaction
 
     @State private var showingDeleteConfirmation = false
+    @State private var showingEdit = false
 
     private var isTransfer: Bool {
         transaction.category == "Trasferimento"
@@ -20,10 +21,7 @@ struct TransactionDetailView: View {
                     LabeledContent("Titolo", value: transaction.title)
                     LabeledContent("Categoria", value: transaction.category)
                     LabeledContent("Tipo", value: typeTitle)
-                    LabeledContent(
-                        "Importo",
-                        value: signedAmount
-                    )
+                    LabeledContent("Importo", value: signedAmount)
                     LabeledContent(
                         "Data",
                         value: transaction.date.formatted(date: .abbreviated, time: .shortened)
@@ -45,6 +43,14 @@ struct TransactionDetailView: View {
                     }
                 } else {
                     Section {
+                        Button {
+                            showingEdit = true
+                        } label: {
+                            Label("Modifica movimento", systemImage: "pencil")
+                        }
+                    }
+
+                    Section {
                         Button(role: .destructive) {
                             showingDeleteConfirmation = true
                         } label: {
@@ -59,6 +65,9 @@ struct TransactionDetailView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Chiudi") { dismiss() }
                 }
+            }
+            .sheet(isPresented: $showingEdit) {
+                EditTransactionView(transaction: transaction)
             }
             .confirmationDialog(
                 "Eliminare questo movimento?",
@@ -97,5 +106,98 @@ struct TransactionDetailView: View {
         case .income: return "+\(amount)"
         case .transfer: return amount
         }
+    }
+}
+
+private struct EditTransactionView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Query private var wallets: [Wallet]
+
+    let transaction: Transaction
+
+    @State private var title: String
+    @State private var amount: String
+    @State private var category: String
+    @State private var type: TransactionType
+    @State private var selectedWallet: Wallet?
+    @State private var date: Date
+
+    init(transaction: Transaction) {
+        self.transaction = transaction
+        _title = State(initialValue: transaction.title)
+        _amount = State(initialValue: NSDecimalNumber(decimal: transaction.amount).stringValue)
+        _category = State(initialValue: transaction.category)
+        _type = State(initialValue: transaction.type)
+        _selectedWallet = State(initialValue: transaction.wallet)
+        _date = State(initialValue: transaction.date)
+    }
+
+    private var parsedAmount: Decimal? {
+        Decimal(string: amount.replacingOccurrences(of: ",", with: "."))
+    }
+
+    private var canSave: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !category.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        (parsedAmount ?? 0) > 0 &&
+        selectedWallet != nil
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Tipo") {
+                    Picker("Tipo", selection: $type) {
+                        Text("Spesa").tag(TransactionType.expense)
+                        Text("Entrata").tag(TransactionType.income)
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                Section("Movimento") {
+                    TextField("Titolo", text: $title)
+                    TextField("Importo", text: $amount)
+                        .keyboardType(.decimalPad)
+                    TextField("Categoria", text: $category)
+                    DatePicker("Data", selection: $date)
+                }
+
+                Section("Portafoglio") {
+                    Picker("Portafoglio", selection: $selectedWallet) {
+                        ForEach(wallets) { wallet in
+                            Label(wallet.name, systemImage: wallet.icon)
+                                .tag(wallet as Wallet?)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Modifica movimento")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Annulla") { dismiss() }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Salva") {
+                        save()
+                    }
+                    .disabled(!canSave)
+                }
+            }
+        }
+    }
+
+    private func save() {
+        guard let parsedAmount,
+              let selectedWallet else { return }
+
+        transaction.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        transaction.amount = parsedAmount
+        transaction.category = category.trimmingCharacters(in: .whitespacesAndNewlines)
+        transaction.type = type
+        transaction.wallet = selectedWallet
+        transaction.date = date
+        dismiss()
     }
 }
