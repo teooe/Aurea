@@ -18,11 +18,12 @@ enum AppNotificationManager {
     }
 
     private static func scheduleRelationships(_ relationships: [Relationship]) {
-        guard UserDefaults.standard.object(forKey: relationshipKey) as? Bool ?? true else { return }
         let center = UNUserNotificationCenter.current()
+        let ids = relationships.map { "relationship-\($0.id.uuidString)" }
+        center.removePendingNotificationRequests(withIdentifiers: ids)
+        guard UserDefaults.standard.object(forKey: relationshipKey) as? Bool ?? true else { return }
+
         for item in relationships where !item.isClosed && item.remainingAmount > 0 {
-            let id = "relationship-\(item.id.uuidString)"
-            center.removePendingNotificationRequests(withIdentifiers: [id])
             guard let due = item.dueDate else { continue }
             let fire = Calendar.current.date(byAdding: .day, value: -1, to: due) ?? due
             guard fire > Date() else { continue }
@@ -31,16 +32,17 @@ enum AppNotificationManager {
             content.body = "\(item.personName): \(item.remainingAmount.formatted(.currency(code: "EUR")))"
             content.sound = .default
             let comps = Calendar.current.dateComponents([.year,.month,.day,.hour,.minute], from: Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: fire) ?? fire)
-            center.add(UNNotificationRequest(identifier: id, content: content, trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)))
+            center.add(UNNotificationRequest(identifier: "relationship-\(item.id.uuidString)", content: content, trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)))
         }
     }
 
     private static func scheduleRecurring(_ recurring: [RecurringTransaction]) {
-        guard UserDefaults.standard.object(forKey: recurringKey) as? Bool ?? true else { return }
         let center = UNUserNotificationCenter.current()
+        let ids = recurring.map { "recurring-\($0.id.uuidString)" }
+        center.removePendingNotificationRequests(withIdentifiers: ids)
+        guard UserDefaults.standard.object(forKey: recurringKey) as? Bool ?? true else { return }
+
         for item in recurring where item.isActive {
-            let id = "recurring-\(item.id.uuidString)"
-            center.removePendingNotificationRequests(withIdentifiers: [id])
             let fire = Calendar.current.date(byAdding: .day, value: -1, to: item.nextDate) ?? item.nextDate
             guard fire > Date() else { continue }
             let content = UNMutableNotificationContent()
@@ -48,7 +50,7 @@ enum AppNotificationManager {
             content.body = "\(item.title): \(item.amount.formatted(.currency(code: item.wallet?.currencyCode ?? "EUR")))"
             content.sound = .default
             let comps = Calendar.current.dateComponents([.year,.month,.day,.hour,.minute], from: Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: fire) ?? fire)
-            center.add(UNNotificationRequest(identifier: id, content: content, trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)))
+            center.add(UNNotificationRequest(identifier: "recurring-\(item.id.uuidString)", content: content, trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)))
         }
     }
 
