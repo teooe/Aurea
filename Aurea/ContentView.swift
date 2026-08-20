@@ -24,7 +24,7 @@ struct ContentView: View {
                 .tag(2)
                 .tabItem { Label("Agenda", systemImage: "calendar") }
 
-            AureaAIPlaceholderView()
+            AureaAssistantView()
                 .tag(3)
                 .tabItem { Label("Aurea", systemImage: "sparkles") }
         }
@@ -146,26 +146,6 @@ private struct HomeView: View {
 
     private func toggleCard(_ card: HomeCard) {
         withAnimation(Theme.Animation.standard) { expandedCard = expandedCard == card ? nil : card }
-    }
-}
-
-private struct AureaAIPlaceholderView: View {
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 18) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 46))
-                Text("Aurea")
-                    .font(.largeTitle.bold())
-                Text("Il tuo assistente personale per finanze e organizzazione arriverà qui.")
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 36)
-                Spacer()
-            }
-            .padding(.top, 70)
-            .navigationTitle("Aurea AI")
-        }
     }
 }
 
