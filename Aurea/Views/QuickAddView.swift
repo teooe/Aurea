@@ -6,8 +6,8 @@ struct QuickAddView: View {
     @Environment(\.dismiss) private var dismiss
 
     @Query private var wallets: [Wallet]
-    @Query(sort: \Transaction.date, order: .reverse)
-    private var transactions: [Transaction]
+    @Query(sort: \Transaction.date, order: .reverse) private var transactions: [Transaction]
+    @Query(sort: \FinanceCategory.name) private var financeCategories: [FinanceCategory]
 
     @State private var type: TransactionType = .expense
     @State private var title = ""
@@ -17,41 +17,28 @@ struct QuickAddView: View {
     @State private var destinationWallet: Wallet?
     @State private var showingConfirmation = false
 
-    private let expenseCategories = [
-        "Alimentari", "Trasporti", "Casa", "Svago", "Salute", "Shopping", "Altro"
-    ]
+    private let fallbackExpenseCategories = ["Alimentari", "Trasporti", "Casa", "Svago", "Salute", "Shopping", "Altro"]
+    private let fallbackIncomeCategories = ["Stipendio", "Regalo", "Rimborso", "Vendita", "Altro"]
 
-    private let incomeCategories = [
-        "Stipendio", "Regalo", "Rimborso", "Vendita", "Altro"
-    ]
+    private var activeWallets: [Wallet] { wallets.filter { !$0.isArchived } }
 
     private var suggestedCategories: [String] {
-        switch type {
-        case .expense:
-            expenseCategories
-        case .income:
-            incomeCategories
-        case .transfer:
-            ["Trasferimento"]
-        }
+        if type == .transfer { return ["Trasferimento"] }
+        let custom = financeCategories.filter { $0.type == type && !$0.isArchived }.map(\.name)
+        if !custom.isEmpty { return custom }
+        return type == .expense ? fallbackExpenseCategories : fallbackIncomeCategories
     }
 
     private var recentCategories: [String] {
         var seen = Set<String>()
         var result: [String] = []
-
         for transaction in transactions where transaction.type == type {
             let value = transaction.category.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !value.isEmpty,
-                  value != "Trasferimento",
-                  !seen.contains(value) else { continue }
-
+            guard !value.isEmpty, value != "Trasferimento", !seen.contains(value) else { continue }
             seen.insert(value)
             result.append(value)
-
             if result.count == 3 { break }
         }
-
         return result
     }
 
@@ -69,7 +56,7 @@ struct QuickAddView: View {
                         if newValue == .transfer {
                             category = "Trasferimento"
                             if destinationWallet == nil || destinationWallet === selectedWallet {
-                                destinationWallet = wallets.first { $0 !== selectedWallet }
+                                destinationWallet = activeWallets.first { $0 !== selectedWallet }
                             }
                         } else if category == "Trasferimento" {
                             category = ""
@@ -79,48 +66,31 @@ struct QuickAddView: View {
 
                 Section("Movimento") {
                     TextField("Titolo", text: $title)
-                        .textInputAutocapitalization(.sentences)
-
-                    TextField("Importo", text: $amount)
-                        .keyboardType(.decimalPad)
+                    TextField("Importo", text: $amount).keyboardType(.decimalPad)
 
                     if type != .transfer {
                         TextField("Categoria", text: $category)
 
                         if !recentCategories.isEmpty {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Usate di recente")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-
-                                ScrollView(.horizontal, showsIndicators: false) {
-                                    HStack(spacing: 8) {
-                                        ForEach(recentCategories, id: \.self) { suggestion in
-                                            Button(suggestion) {
-                                                category = suggestion
-                                            }
+                            Text("Usate di recente").font(.caption).foregroundStyle(.secondary)
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(recentCategories, id: \.self) { suggestion in
+                                        Button(suggestion) { category = suggestion }
                                             .buttonStyle(.borderedProminent)
                                             .controlSize(.small)
-                                        }
                                     }
                                 }
                             }
                         }
 
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Categorie")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 8) {
-                                    ForEach(suggestedCategories, id: \.self) { suggestion in
-                                        Button(suggestion) {
-                                            category = suggestion
-                                        }
+                        Text("Categorie").font(.caption).foregroundStyle(.secondary)
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(suggestedCategories, id: \.self) { suggestion in
+                                    Button(suggestion) { category = suggestion }
                                         .buttonStyle(.bordered)
                                         .controlSize(.small)
-                                    }
                                 }
                             }
                         }
@@ -129,43 +99,37 @@ struct QuickAddView: View {
 
                 if type == .transfer {
                     Section("Trasferimento") {
-                        if wallets.count < 2 {
-                            Text("Servono almeno due portafogli per effettuare un trasferimento.")
+                        if activeWallets.count < 2 {
+                            Text("Servono almeno due portafogli attivi per effettuare un trasferimento.")
                                 .foregroundStyle(.secondary)
                         } else {
                             Picker("Da", selection: $selectedWallet) {
-                                ForEach(wallets) { wallet in
-                                    Label(wallet.name, systemImage: wallet.icon)
-                                        .tag(wallet as Wallet?)
+                                ForEach(activeWallets) { wallet in
+                                    Label(wallet.name, systemImage: wallet.icon).tag(wallet as Wallet?)
                                 }
                             }
                             .onChange(of: selectedWallet) { _, newWallet in
                                 if destinationWallet === newWallet {
-                                    destinationWallet = wallets.first { $0 !== newWallet }
+                                    destinationWallet = activeWallets.first { $0 !== newWallet }
                                 }
                             }
 
                             Picker("A", selection: $destinationWallet) {
-                                ForEach(wallets.filter { $0 !== selectedWallet }) { wallet in
-                                    Label(wallet.name, systemImage: wallet.icon)
-                                        .tag(wallet as Wallet?)
+                                ForEach(activeWallets.filter { $0 !== selectedWallet }) { wallet in
+                                    Label(wallet.name, systemImage: wallet.icon).tag(wallet as Wallet?)
                                 }
                             }
                         }
                     }
                 } else {
                     Section("Portafoglio") {
-                        if wallets.isEmpty {
-                            Text("Nessun portafoglio disponibile")
-                                .foregroundStyle(.secondary)
+                        if activeWallets.isEmpty {
+                            Text("Nessun portafoglio disponibile").foregroundStyle(.secondary)
                         } else {
                             Picker("Portafoglio", selection: $selectedWallet) {
-                                Text("Seleziona")
-                                    .tag(nil as Wallet?)
-
-                                ForEach(wallets) { wallet in
-                                    Label(wallet.name, systemImage: wallet.icon)
-                                        .tag(wallet as Wallet?)
+                                Text("Seleziona").tag(nil as Wallet?)
+                                ForEach(activeWallets) { wallet in
+                                    Label(wallet.name, systemImage: wallet.icon).tag(wallet as Wallet?)
                                 }
                             }
                         }
@@ -173,36 +137,20 @@ struct QuickAddView: View {
                 }
 
                 Section {
-                    Button("Continua") {
-                        showingConfirmation = true
-                    }
-                    .disabled(!canSave)
+                    Button("Continua") { showingConfirmation = true }
+                        .disabled(!canSave)
                 }
             }
             .navigationTitle("Nuovo movimento")
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Annulla") {
-                        dismiss()
-                    }
-                }
+                ToolbarItem(placement: .cancellationAction) { Button("Annulla") { dismiss() } }
             }
             .onAppear {
-                if selectedWallet == nil {
-                    selectedWallet = wallets.first
-                }
-                if destinationWallet == nil {
-                    destinationWallet = wallets.first { $0 !== selectedWallet }
-                }
+                if selectedWallet == nil { selectedWallet = activeWallets.first }
+                if destinationWallet == nil { destinationWallet = activeWallets.first { $0 !== selectedWallet } }
             }
-            .confirmationDialog(
-                "Conferma movimento",
-                isPresented: $showingConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Salva") {
-                    saveTransaction()
-                }
+            .confirmationDialog("Conferma movimento", isPresented: $showingConfirmation, titleVisibility: .visible) {
+                Button("Salva") { saveTransaction() }
                 Button("Annulla", role: .cancel) { }
             } message: {
                 Text(confirmationText)
@@ -210,81 +158,37 @@ struct QuickAddView: View {
         }
     }
 
-    private var parsedAmount: Decimal? {
-        Decimal(string: amount.replacingOccurrences(of: ",", with: "."))
-    }
+    private var parsedAmount: Decimal? { Decimal(string: amount.replacingOccurrences(of: ",", with: ".")) }
 
     private var canSave: Bool {
-        let baseValid = !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-            (parsedAmount ?? 0) > 0 &&
-            selectedWallet != nil
-
+        let baseValid = !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (parsedAmount ?? 0) > 0 && selectedWallet != nil
         if type == .transfer {
-            return baseValid &&
-                wallets.count >= 2 &&
-                destinationWallet != nil &&
-                destinationWallet !== selectedWallet
+            return baseValid && activeWallets.count >= 2 && destinationWallet != nil && destinationWallet !== selectedWallet
         }
-
-        return baseValid &&
-            !category.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return baseValid && !category.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var confirmationText: String {
         let amountText = parsedAmount?.formatted(.currency(code: selectedWallet?.currencyCode ?? "EUR")) ?? ""
-
         if type == .transfer {
-            let source = selectedWallet?.name ?? ""
-            let destination = destinationWallet?.name ?? ""
-            return "Trasferimento: \(title) • \(amountText) • da \(source) a \(destination)"
+            return "Trasferimento: \(title) • \(amountText) • da \(selectedWallet?.name ?? "") a \(destinationWallet?.name ?? "")"
         }
-
-        let typeText = type == .expense ? "Spesa" : "Entrata"
-        return "\(typeText): \(title) • \(amountText) • \(category)"
+        return "\(type == .expense ? "Spesa" : "Entrata"): \(title) • \(amountText) • \(category)"
     }
 
     private func saveTransaction() {
-        guard let decimalAmount = parsedAmount,
-              let wallet = selectedWallet else {
-            return
-        }
-
+        guard let decimalAmount = parsedAmount, let wallet = selectedWallet else { return }
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if type == .transfer {
-            guard let destinationWallet,
-                  destinationWallet !== wallet else {
-                return
-            }
-
-            let outgoing = Transaction(
-                type: .expense,
-                amount: decimalAmount,
-                category: "Trasferimento",
-                title: "\(cleanTitle) → \(destinationWallet.name)",
-                wallet: wallet
-            )
-
-            let incoming = Transaction(
-                type: .income,
-                amount: decimalAmount,
-                category: "Trasferimento",
-                title: "\(cleanTitle) ← \(wallet.name)",
-                wallet: destinationWallet
-            )
-
+            guard let destinationWallet, destinationWallet !== wallet else { return }
+            let groupID = UUID()
+            let outgoing = Transaction(type: .expense, amount: decimalAmount, category: "Trasferimento", title: "\(cleanTitle) → \(destinationWallet.name)", wallet: wallet, transferGroupID: groupID)
+            let incoming = Transaction(type: .income, amount: decimalAmount, category: "Trasferimento", title: "\(cleanTitle) ← \(wallet.name)", wallet: destinationWallet, transferGroupID: groupID)
             modelContext.insert(outgoing)
             modelContext.insert(incoming)
         } else {
-            let transaction = Transaction(
-                type: type,
-                amount: decimalAmount,
-                category: category.trimmingCharacters(in: .whitespacesAndNewlines),
-                title: cleanTitle,
-                wallet: wallet
-            )
-
-            modelContext.insert(transaction)
+            modelContext.insert(Transaction(type: type, amount: decimalAmount, category: category.trimmingCharacters(in: .whitespacesAndNewlines), title: cleanTitle, wallet: wallet))
         }
 
         dismiss()
@@ -293,8 +197,5 @@ struct QuickAddView: View {
 
 #Preview {
     QuickAddView()
-        .modelContainer(
-            for: [Wallet.self, Transaction.self],
-            inMemory: true
-        )
+        .modelContainer(for: [Wallet.self, Transaction.self, FinanceCategory.self], inMemory: true)
 }
