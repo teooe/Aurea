@@ -14,6 +14,7 @@ struct AureaApp: App {
         let schema = Schema([
             Wallet.self,
             Transaction.self,
+            Relationship.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
