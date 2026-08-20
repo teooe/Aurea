@@ -15,6 +15,7 @@ struct SettingsView: View {
     @State private var showingAgenda = false
     @State private var showingQuickAdd = false
     @State private var showingInsights = false
+    @State private var showingReports = false
 
     private var openAgendaItems: Int { agendaItems.filter { !$0.isCompleted }.count }
     private var activeWallets: Int { wallets.filter { !$0.isArchived }.count }
@@ -26,31 +27,15 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("Analisi") {
+                    Button { showingInsights = true } label: { navigationRow("Panoramica completa", icon: "rectangle.3.group") }
+                    Button { showingReports = true } label: { navigationRow("Report e statistiche", icon: "chart.bar.xaxis") }
+                }
+
                 Section("Gestione") {
-                    Button { showingInsights = true } label: {
-                        HStack {
-                            Label("Panoramica completa", systemImage: "rectangle.3.group")
-                            Spacer()
-                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
-                        }
-                    }
-                    Button { showingQuickAdd = true } label: {
-                        Label("Aggiungi qualcosa", systemImage: "plus.circle")
-                    }
-                    Button { showingFinance = true } label: {
-                        HStack {
-                            Label("Centro finanziario", systemImage: "chart.pie")
-                            Spacer()
-                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
-                        }
-                    }
-                    Button { showingAgenda = true } label: {
-                        HStack {
-                            Label("Agenda completa", systemImage: "calendar")
-                            Spacer()
-                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
-                        }
-                    }
+                    Button { showingQuickAdd = true } label: { Label("Aggiungi qualcosa", systemImage: "plus.circle") }
+                    Button { showingFinance = true } label: { navigationRow("Centro finanziario", icon: "chart.pie") }
+                    Button { showingAgenda = true } label: { navigationRow("Agenda completa", icon: "calendar") }
                 }
 
                 Section("Panoramica dati") {
@@ -64,33 +49,14 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    ShareLink(item: summaryText) {
-                        Label("Condividi riepilogo Aurea", systemImage: "square.and.arrow.up")
-                    }
-                } header: {
-                    Text("Condivisione")
-                } footer: {
-                    Text("Il riepilogo contiene solo conteggi generali e non include l'elenco completo dei movimenti.")
-                }
+                    ShareLink(item: summaryText) { Label("Condividi riepilogo Aurea", systemImage: "square.and.arrow.up") }
+                } header: { Text("Condivisione") } footer: { Text("Il riepilogo contiene solo conteggi generali e non include l'elenco completo dei movimenti.") }
 
                 Section {
-                    LabeledContent("Archiviazione") {
-                        Label("Sul dispositivo", systemImage: "iphone")
-                            .foregroundStyle(.secondary)
-                    }
-                    LabeledContent("Aurea AI v2") {
-                        Text("Locale")
-                            .foregroundStyle(.secondary)
-                    }
-                    LabeledContent("Conferma azioni AI") {
-                        Text("Sempre attiva")
-                            .foregroundStyle(.secondary)
-                    }
-                } header: {
-                    Text("Privacy e funzionamento")
-                } footer: {
-                    Text("Nella versione attuale Aurea AI analizza i dati già presenti nell'app e chiede conferma prima di creare movimenti o impegni.")
-                }
+                    LabeledContent("Archiviazione") { Label("Sul dispositivo", systemImage: "iphone").foregroundStyle(.secondary) }
+                    LabeledContent("Aurea AI v2") { Text("Locale").foregroundStyle(.secondary) }
+                    LabeledContent("Conferma azioni AI") { Text("Sempre attiva").foregroundStyle(.secondary) }
+                } header: { Text("Privacy e funzionamento") } footer: { Text("Nella versione attuale Aurea AI analizza i dati già presenti nell'app e chiede conferma prima di creare movimenti o impegni.") }
 
                 Section("Informazioni") {
                     LabeledContent("App", value: "Aurea")
@@ -100,12 +66,9 @@ struct SettingsView: View {
             }
             .navigationTitle("Aurea")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Fine") { dismiss() }
-                }
-            }
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fine") { dismiss() } } }
             .sheet(isPresented: $showingInsights) { AureaInsightsView() }
+            .sheet(isPresented: $showingReports) { ReportsView() }
             .sheet(isPresented: $showingFinance) { FinanceCenterView() }
             .sheet(isPresented: $showingAgenda) { AgendaView() }
             .sheet(isPresented: $showingQuickAdd) { GlobalQuickAddView() }
@@ -125,13 +88,10 @@ struct SettingsView: View {
         """
     }
 
+    private func navigationRow(_ title: String, icon: String) -> some View {
+        HStack { Label(title, systemImage: icon); Spacer(); Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary) }
+    }
     private func dataRow(_ title: String, value: Int, icon: String) -> some View {
-        HStack {
-            Label(title, systemImage: icon)
-            Spacer()
-            Text("\(value)")
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-        }
+        HStack { Label(title, systemImage: icon); Spacer(); Text("\(value)").foregroundStyle(.secondary).monospacedDigit() }
     }
 }
