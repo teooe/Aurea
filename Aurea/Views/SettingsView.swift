@@ -63,15 +63,17 @@ struct SettingsView: View {
                     dataRow("Ricorrenti attive", value: activeRecurring, icon: "repeat")
                 }
 
-                Section("Condivisione") {
+                Section {
                     ShareLink(item: summaryText) {
                         Label("Condividi riepilogo Aurea", systemImage: "square.and.arrow.up")
                     }
+                } header: {
+                    Text("Condivisione")
                 } footer: {
                     Text("Il riepilogo contiene solo conteggi generali e non include l'elenco completo dei movimenti.")
                 }
 
-                Section("Privacy e funzionamento") {
+                Section {
                     LabeledContent("Archiviazione") {
                         Label("Sul dispositivo", systemImage: "iphone")
                             .foregroundStyle(.secondary)
@@ -84,6 +86,8 @@ struct SettingsView: View {
                         Text("Sempre attiva")
                             .foregroundStyle(.secondary)
                     }
+                } header: {
+                    Text("Privacy e funzionamento")
                 } footer: {
                     Text("Nella versione attuale Aurea AI analizza i dati già presenti nell'app e chiede conferma prima di creare movimenti o impegni.")
                 }
