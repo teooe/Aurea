@@ -25,16 +25,29 @@ struct RelationshipDetailView: View {
                         "Creato",
                         value: relationship.createdAt.formatted(date: .abbreviated, time: .omitted)
                     )
+
+                    LabeledContent(
+                        "Stato",
+                        value: relationship.isClosed ? "Saldato" : "Aperto"
+                    )
                 }
 
                 Section {
-                    Button {
-                        relationship.isClosed = true
-                        dismiss()
-                    } label: {
-                        Label("Segna come saldato", systemImage: "checkmark.circle")
+                    if relationship.isClosed {
+                        Button {
+                            relationship.isClosed = false
+                            dismiss()
+                        } label: {
+                            Label("Riapri", systemImage: "arrow.uturn.backward.circle")
+                        }
+                    } else {
+                        Button {
+                            relationship.isClosed = true
+                            dismiss()
+                        } label: {
+                            Label("Segna come saldato", systemImage: "checkmark.circle")
+                        }
                     }
-                    .disabled(relationship.isClosed)
                 }
 
                 Section {
