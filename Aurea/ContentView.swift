@@ -7,7 +7,7 @@ struct ContentView: View {
 
     var body: some View {
         TabView(selection: $selection) {
-            HomeDashboardView()
+            HomeRootView()
                 .tag(0)
                 .tabItem { Label("Home", systemImage: "house") }
 
@@ -36,6 +36,33 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $showingQuickAdd) { GlobalQuickAddView() }
+    }
+}
+
+private struct HomeRootView: View {
+    @State private var showingSettings = false
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            HomeDashboardView()
+
+            Button {
+                showingSettings = true
+            } label: {
+                Image(systemName: "gearshape.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(width: 38, height: 38)
+                    .background(.regularMaterial)
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 18)
+            .padding(.trailing, 18)
+            .accessibilityLabel("Impostazioni")
+        }
+        .sheet(isPresented: $showingSettings) {
+            SettingsView()
+        }
     }
 }
 
