@@ -17,13 +17,11 @@ struct SettingsView: View {
     @AppStorage("aurea.notifications.budgets") private var budgetNotifications = true
     @AppStorage("aurea.agenda.showCompleted") private var showCompletedAgenda = true
     @AppStorage("aurea.agenda.defaultReminder") private var defaultReminder = 0
-    @AppStorage("aurea.onboarding.completed") private var onboardingCompleted = true
 
     @State private var showingFinance = false
     @State private var showingAgenda = false
     @State private var showingQuickAdd = false
     @State private var showingInsights = false
-    @State private var showingReports = false
     @State private var showingOnboarding = false
     @State private var exportCSV = false
     @State private var exportBackup = false
@@ -42,7 +40,6 @@ struct SettingsView: View {
             Form {
                 Section("Analisi") {
                     navigationButton("Panoramica completa", icon: "rectangle.3.group") { showingInsights = true }
-                    navigationButton("Report e statistiche", icon: "chart.xyaxis.line") { showingReports = true }
                 }
 
                 Section("Gestione") {
@@ -55,9 +52,7 @@ struct SettingsView: View {
                     Toggle("Debiti e crediti", isOn: $relationshipNotifications)
                     Toggle("Movimenti ricorrenti", isOn: $recurringNotifications)
                     Toggle("Avvisi budget", isOn: $budgetNotifications)
-                    Button {
-                        AppNotificationManager.refresh(relationships: relationships, recurring: recurringTransactions, budgets: budgets, transactions: transactions)
-                    } label: {
+                    Button { refreshReminders() } label: {
                         Label("Aggiorna promemoria", systemImage: "bell.badge")
                     }
                 } header: {
@@ -97,15 +92,11 @@ struct SettingsView: View {
                     Button {
                         csvDocument = AureaTextDocument(text: makeCSV())
                         exportCSV = true
-                    } label: {
-                        Label("Esporta movimenti CSV", systemImage: "tablecells")
-                    }
+                    } label: { Label("Esporta movimenti CSV", systemImage: "tablecells") }
                     Button {
                         backupDocument = AureaTextDocument(text: makeBackupJSON())
                         exportBackup = true
-                    } label: {
-                        Label("Crea backup JSON", systemImage: "externaldrive")
-                    }
+                    } label: { Label("Crea backup JSON", systemImage: "externaldrive") }
                 } header: {
                     Text("Esportazione e backup")
                 } footer: {
@@ -113,24 +104,17 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Button {
-                        showingOnboarding = true
-                    } label: {
+                    Button { showingOnboarding = true } label: {
                         Label("Rivedi introduzione", systemImage: "play.rectangle")
                     }
-                } header: {
-                    Text("Aiuto")
-                }
+                } header: { Text("Aiuto") }
 
                 Section {
                     LabeledContent("Archiviazione") { Label("Sul dispositivo", systemImage: "iphone").foregroundStyle(.secondary) }
                     LabeledContent("Aurea AI v2") { Text("Locale").foregroundStyle(.secondary) }
                     LabeledContent("Conferma azioni AI") { Text("Sempre attiva").foregroundStyle(.secondary) }
-                } header: {
-                    Text("Privacy e funzionamento")
-                } footer: {
-                    Text("Aurea AI usa i dati già presenti nell'app e chiede conferma prima di creare movimenti o impegni.")
-                }
+                } header: { Text("Privacy e funzionamento") }
+                footer: { Text("Aurea AI usa i dati già presenti nell'app e chiede conferma prima di creare movimenti o impegni.") }
 
                 Section("Informazioni") {
                     LabeledContent("App", value: "Aurea")
@@ -142,7 +126,6 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fine") { dismiss() } } }
             .sheet(isPresented: $showingInsights) { AureaInsightsView() }
-            .sheet(isPresented: $showingReports) { AureaReportsView() }
             .sheet(isPresented: $showingFinance) { FinanceCenterView() }
             .sheet(isPresented: $showingAgenda) { AgendaView() }
             .sheet(isPresented: $showingQuickAdd) { GlobalQuickAddView() }
@@ -157,11 +140,7 @@ struct SettingsView: View {
 
     private func navigationButton(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack {
-                Label(title, systemImage: icon)
-                Spacer()
-                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
-            }
+            HStack { Label(title, systemImage: icon); Spacer(); Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary) }
         }
     }
 
@@ -170,11 +149,7 @@ struct SettingsView: View {
     }
 
     private func dataRow(_ title: String, value: Int, icon: String) -> some View {
-        HStack {
-            Label(title, systemImage: icon)
-            Spacer()
-            Text("\(value)").foregroundStyle(.secondary).monospacedDigit()
-        }
+        HStack { Label(title, systemImage: icon); Spacer(); Text("\(value)").foregroundStyle(.secondary).monospacedDigit() }
     }
 
     private func makeCSV() -> String {
@@ -182,15 +157,7 @@ struct SettingsView: View {
         let formatter = ISO8601DateFormatter()
         for transaction in transactions.sorted(by: { $0.date < $1.date }) {
             let type = transaction.type == .expense ? "Spesa" : "Entrata"
-            let values = [
-                formatter.string(from: transaction.date),
-                type,
-                transaction.title,
-                transaction.category,
-                NSDecimalNumber(decimal: transaction.amount).stringValue,
-                transaction.wallet?.currencyCode ?? "EUR",
-                transaction.wallet?.name ?? ""
-            ].map(csvEscape)
+            let values = [formatter.string(from: transaction.date), type, transaction.title, transaction.category, NSDecimalNumber(decimal: transaction.amount).stringValue, transaction.wallet?.currencyCode ?? "EUR", transaction.wallet?.name ?? ""].map(csvEscape)
             rows.append(values.joined(separator: ","))
         }
         return rows.joined(separator: "\n")
@@ -205,7 +172,7 @@ struct SettingsView: View {
         let payload: [String: Any] = [
             "version": 1,
             "createdAt": formatter.string(from: .now),
-            "wallets": wallets.map { ["name": $0.name, "currency": $0.currencyCode, "balance": NSDecimalNumber(decimal: $0.balance).stringValue, "archived": $0.isArchived] },
+            "wallets": wallets.map { ["name": $0.name, "currency": $0.currencyCode, "balance": NSDecimalNumber(decimal: FinancialEngine.balance(for: $0)).stringValue, "archived": $0.isArchived] },
             "transactions": transactions.map { ["date": formatter.string(from: $0.date), "type": $0.type.rawValue, "title": $0.title, "category": $0.category, "amount": NSDecimalNumber(decimal: $0.amount).stringValue, "wallet": $0.wallet?.name ?? ""] },
             "agenda": agendaItems.map { ["title": $0.title, "type": $0.type.rawValue, "date": formatter.string(from: $0.date), "completed": $0.isCompleted, "priority": $0.priority.rawValue] },
             "goals": goals.map { ["title": $0.title, "type": $0.type.rawValue, "currentAmount": NSDecimalNumber(decimal: $0.currentAmount).stringValue, "targetAmount": $0.targetAmount.map { NSDecimalNumber(decimal: $0).stringValue } ?? "", "completed": $0.isCompleted] },
@@ -221,12 +188,7 @@ struct SettingsView: View {
 struct AureaTextDocument: FileDocument {
     static var readableContentTypes: [UTType] { [.plainText, .commaSeparatedText, .json] }
     var text: String
-
     init(text: String) { self.text = text }
-    init(configuration: ReadConfiguration) throws {
-        text = configuration.file.regularFileContents.flatMap { String(data: $0, encoding: .utf8) } ?? ""
-    }
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        FileWrapper(regularFileWithContents: Data(text.utf8))
-    }
+    init(configuration: ReadConfiguration) throws { text = configuration.file.regularFileContents.flatMap { String(data: $0, encoding: .utf8) } ?? "" }
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: Data(text.utf8)) }
 }
