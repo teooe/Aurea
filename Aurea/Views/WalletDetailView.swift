@@ -7,6 +7,8 @@ struct WalletDetailView: View {
 
     let wallet: Wallet
 
+    @State private var selectedTransaction: Transaction?
+
     private var transactions: [Transaction] {
         wallet.transactions.sorted { $0.date > $1.date }
     }
@@ -42,25 +44,43 @@ struct WalletDetailView: View {
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(transactions) { transaction in
-                            HStack(spacing: 12) {
-                                Image(systemName: icon(for: transaction))
-                                    .frame(width: 24)
+                            Button {
+                                selectedTransaction = transaction
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: icon(for: transaction))
+                                        .frame(width: 24)
 
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(transaction.title)
-                                    Text("\(transaction.category) • \(transaction.date.formatted(date: .abbreviated, time: .shortened))")
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(transaction.title)
+                                            .foregroundStyle(.primary)
+                                        Text("\(transaction.category) • \(transaction.date.formatted(date: .abbreviated, time: .shortened))")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+
+                                    Spacer()
+
+                                    Text(signedAmount(for: transaction))
+                                        .fontWeight(.medium)
+                                        .foregroundStyle(amountColor(for: transaction))
+
+                                    Image(systemName: "chevron.right")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
-
-                                Spacer()
-
-                                Text(signedAmount(for: transaction))
-                                    .fontWeight(.medium)
-                                    .foregroundStyle(amountColor(for: transaction))
+                            }
+                            .buttonStyle(.plain)
+                            .swipeActions {
+                                if transaction.category != "Trasferimento" {
+                                    Button(role: .destructive) {
+                                        modelContext.delete(transaction)
+                                    } label: {
+                                        Label("Elimina", systemImage: "trash")
+                                    }
+                                }
                             }
                         }
-                        .onDelete(perform: deleteTransactions)
                     }
                 }
             }
@@ -71,10 +91,17 @@ struct WalletDetailView: View {
                     Button("Chiudi") { dismiss() }
                 }
             }
+            .sheet(item: $selectedTransaction) { transaction in
+                TransactionDetailView(transaction: transaction)
+            }
         }
     }
 
     private func icon(for transaction: Transaction) -> String {
+        if transaction.category == "Trasferimento" {
+            return "arrow.left.arrow.right.circle"
+        }
+
         switch transaction.type {
         case .expense: return "arrow.down.circle"
         case .income: return "arrow.up.circle"
@@ -92,16 +119,14 @@ struct WalletDetailView: View {
     }
 
     private func amountColor(for transaction: Transaction) -> Color {
+        if transaction.category == "Trasferimento" {
+            return .secondary
+        }
+
         switch transaction.type {
         case .expense: return .red
         case .income: return .green
         case .transfer: return .secondary
-        }
-    }
-
-    private func deleteTransactions(at offsets: IndexSet) {
-        for index in offsets {
-            modelContext.delete(transactions[index])
         }
     }
 }
