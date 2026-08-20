@@ -12,6 +12,7 @@ struct QuickAddView: View {
     @State private var amount = ""
     @State private var category = ""
     @State private var selectedWallet: Wallet?
+    @State private var destinationWallet: Wallet?
     @State private var showingConfirmation = false
 
     private let expenseCategories = [
@@ -46,6 +47,9 @@ struct QuickAddView: View {
                     .onChange(of: type) { _, newValue in
                         if newValue == .transfer {
                             category = "Trasferimento"
+                            if destinationWallet == nil || destinationWallet === selectedWallet {
+                                destinationWallet = wallets.first { $0 !== selectedWallet }
+                            }
                         } else if category == "Trasferimento" {
                             category = ""
                         }
@@ -58,9 +62,9 @@ struct QuickAddView: View {
                     TextField("Importo", text: $amount)
                         .keyboardType(.decimalPad)
 
-                    TextField("Categoria", text: $category)
-
                     if type != .transfer {
+                        TextField("Categoria", text: $category)
+
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 8) {
                                 ForEach(suggestedCategories, id: \.self) { suggestion in
@@ -75,18 +79,46 @@ struct QuickAddView: View {
                     }
                 }
 
-                Section("Portafoglio") {
-                    if wallets.isEmpty {
-                        Text("Nessun portafoglio disponibile")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Picker("Portafoglio", selection: $selectedWallet) {
-                            Text("Seleziona")
-                                .tag(nil as Wallet?)
+                if type == .transfer {
+                    Section("Trasferimento") {
+                        if wallets.count < 2 {
+                            Text("Servono almeno due portafogli per effettuare un trasferimento.")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Picker("Da", selection: $selectedWallet) {
+                                ForEach(wallets) { wallet in
+                                    Label(wallet.name, systemImage: wallet.icon)
+                                        .tag(wallet as Wallet?)
+                                }
+                            }
+                            .onChange(of: selectedWallet) { _, newWallet in
+                                if destinationWallet === newWallet {
+                                    destinationWallet = wallets.first { $0 !== newWallet }
+                                }
+                            }
 
-                            ForEach(wallets) { wallet in
-                                Label(wallet.name, systemImage: wallet.icon)
-                                    .tag(wallet as Wallet?)
+                            Picker("A", selection: $destinationWallet) {
+                                ForEach(wallets.filter { $0 !== selectedWallet }) { wallet in
+                                    Label(wallet.name, systemImage: wallet.icon)
+                                        .tag(wallet as Wallet?)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Section("Portafoglio") {
+                        if wallets.isEmpty {
+                            Text("Nessun portafoglio disponibile")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Picker("Portafoglio", selection: $selectedWallet) {
+                                Text("Seleziona")
+                                    .tag(nil as Wallet?)
+
+                                ForEach(wallets) { wallet in
+                                    Label(wallet.name, systemImage: wallet.icon)
+                                        .tag(wallet as Wallet?)
+                                }
                             }
                         }
                     }
@@ -111,6 +143,9 @@ struct QuickAddView: View {
                 if selectedWallet == nil {
                     selectedWallet = wallets.first
                 }
+                if destinationWallet == nil {
+                    destinationWallet = wallets.first { $0 !== selectedWallet }
+                }
             }
             .confirmationDialog(
                 "Conferma movimento",
@@ -132,21 +167,31 @@ struct QuickAddView: View {
     }
 
     private var canSave: Bool {
-        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        (parsedAmount ?? 0) > 0 &&
-        !category.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        selectedWallet != nil
+        let baseValid = !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            (parsedAmount ?? 0) > 0 &&
+            selectedWallet != nil
+
+        if type == .transfer {
+            return baseValid &&
+                wallets.count >= 2 &&
+                destinationWallet != nil &&
+                destinationWallet !== selectedWallet
+        }
+
+        return baseValid &&
+            !category.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var confirmationText: String {
-        let typeText: String
-        switch type {
-        case .expense: typeText = "Spesa"
-        case .income: typeText = "Entrata"
-        case .transfer: typeText = "Trasferimento"
+        let amountText = parsedAmount?.formatted(.currency(code: selectedWallet?.currencyCode ?? "EUR")) ?? ""
+
+        if type == .transfer {
+            let source = selectedWallet?.name ?? ""
+            let destination = destinationWallet?.name ?? ""
+            return "Trasferimento: \(title) • \(amountText) • da \(source) a \(destination)"
         }
 
-        let amountText = parsedAmount?.formatted(.currency(code: selectedWallet?.currencyCode ?? "EUR")) ?? ""
+        let typeText = type == .expense ? "Spesa" : "Entrata"
         return "\(typeText): \(title) • \(amountText) • \(category)"
     }
 
@@ -156,15 +201,44 @@ struct QuickAddView: View {
             return
         }
 
-        let transaction = Transaction(
-            type: type,
-            amount: decimalAmount,
-            category: category.trimmingCharacters(in: .whitespacesAndNewlines),
-            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
-            wallet: wallet
-        )
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        modelContext.insert(transaction)
+        if type == .transfer {
+            guard let destinationWallet,
+                  destinationWallet !== wallet else {
+                return
+            }
+
+            let outgoing = Transaction(
+                type: .expense,
+                amount: decimalAmount,
+                category: "Trasferimento",
+                title: "\(cleanTitle) → \(destinationWallet.name)",
+                wallet: wallet
+            )
+
+            let incoming = Transaction(
+                type: .income,
+                amount: decimalAmount,
+                category: "Trasferimento",
+                title: "\(cleanTitle) ← \(wallet.name)",
+                wallet: destinationWallet
+            )
+
+            modelContext.insert(outgoing)
+            modelContext.insert(incoming)
+        } else {
+            let transaction = Transaction(
+                type: type,
+                amount: decimalAmount,
+                category: category.trimmingCharacters(in: .whitespacesAndNewlines),
+                title: cleanTitle,
+                wallet: wallet
+            )
+
+            modelContext.insert(transaction)
+        }
+
         dismiss()
     }
 }
