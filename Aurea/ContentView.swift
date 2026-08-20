@@ -34,79 +34,71 @@ struct ContentView: View {
     }
 
     var body: some View {
-        ZStack {
-            Theme.Colors.background
-                .ignoresSafeArea()
-            
-            ScrollView {
-                VStack(spacing: Theme.Spacing.medium) {
-                    NetWorthCardView(
-                        totalNetWorth: totalNetWorth,
-                        wallets: wallets,
-                        monthlyTransactions: monthlyTransactions,
-                        transactionCount: transactions.count,
-                        isExpanded: expandedCard == .netWorth
-                    ) {
-                        withAnimation(Theme.Animation.standard) {
-                            expandedCard = expandedCard == .netWorth ? nil : .netWorth
-                        }
-                    }
-                    
-                    TodayCardView(
-                        transactions: todayTransactions,
-                        isExpanded: expandedCard == .today
-                    ) {
-                        withAnimation(Theme.Animation.standard) {
-                            expandedCard = expandedCard == .today ? nil : .today
-                        }
-                    } onSelectTransaction: { transaction in
-                        selectedTransaction = transaction
-                    }
-                    
-                    WalletsCardView(
-                        wallets: wallets,
-                        isExpanded: expandedCard == .wallets
-                    ) {
-                        withAnimation(Theme.Animation.standard) {
-                            expandedCard = expandedCard == .wallets ? nil : .wallets
-                        }
-                    } onAddWallet: {
-                        showingAddWallet = true
-                    } onSelectWallet: { wallet in
-                        selectedWallet = wallet
-                    }
-                    
-                    GoalsCardView(
-                        goals: goals,
-                        isExpanded: expandedCard == .goals
-                    ) {
-                        withAnimation(Theme.Animation.standard) {
-                            expandedCard = expandedCard == .goals ? nil : .goals
-                        }
-                    } onAddGoal: {
-                        showingAddGoal = true
-                    } onSelectGoal: { goal in
-                        selectedGoal = goal
-                    }
-
-                    RelationshipsCardView(
-                        relationships: relationships,
-                        isExpanded: expandedCard == .relationships
-                    ) {
-                        withAnimation(Theme.Animation.standard) {
-                            expandedCard = expandedCard == .relationships ? nil : .relationships
-                        }
-                    } onAddRelationship: {
-                        showingAddRelationship = true
-                    } onSelectRelationship: { relationship in
-                        selectedRelationship = relationship
-                    }
+        ScrollView(.vertical) {
+            VStack(spacing: Theme.Spacing.medium) {
+                NetWorthCardView(
+                    totalNetWorth: totalNetWorth,
+                    wallets: wallets,
+                    monthlyTransactions: monthlyTransactions,
+                    transactionCount: transactions.count,
+                    isExpanded: expandedCard == .netWorth
+                ) {
+                    toggleCard(.netWorth)
                 }
-                .padding(.horizontal, Theme.Spacing.medium)
-                .padding(.top, Theme.Spacing.medium)
-                .padding(.bottom, 80)
+                
+                TodayCardView(
+                    transactions: todayTransactions,
+                    isExpanded: expandedCard == .today
+                ) {
+                    toggleCard(.today)
+                } onSelectTransaction: { transaction in
+                    selectedTransaction = transaction
+                }
+                
+                WalletsCardView(
+                    wallets: wallets,
+                    isExpanded: expandedCard == .wallets
+                ) {
+                    toggleCard(.wallets)
+                } onAddWallet: {
+                    showingAddWallet = true
+                } onSelectWallet: { wallet in
+                    selectedWallet = wallet
+                }
+                
+                GoalsCardView(
+                    goals: goals,
+                    isExpanded: expandedCard == .goals
+                ) {
+                    toggleCard(.goals)
+                } onAddGoal: {
+                    showingAddGoal = true
+                } onSelectGoal: { goal in
+                    selectedGoal = goal
+                }
+
+                RelationshipsCardView(
+                    relationships: relationships,
+                    isExpanded: expandedCard == .relationships
+                ) {
+                    toggleCard(.relationships)
+                } onAddRelationship: {
+                    showingAddRelationship = true
+                } onSelectRelationship: { relationship in
+                    selectedRelationship = relationship
+                }
+
+                Color.clear
+                    .frame(height: expandedCard == nil ? 70 : 24)
             }
+            .id(expandedCard)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, Theme.Spacing.medium)
+            .padding(.top, Theme.Spacing.medium)
         }
+        .scrollIndicators(.visible)
+        .scrollBounceBehavior(.always)
+        .background(Theme.Colors.background.ignoresSafeArea())
         .safeAreaInset(edge: .bottom) {
             if expandedCard == nil {
                 Button {
@@ -154,6 +146,12 @@ struct ContentView: View {
         }
         .sheet(item: $selectedTransaction) { transaction in
             TransactionDetailView(transaction: transaction)
+        }
+    }
+
+    private func toggleCard(_ card: HomeCard) {
+        withAnimation(Theme.Animation.standard) {
+            expandedCard = expandedCard == card ? nil : card
         }
     }
 }
