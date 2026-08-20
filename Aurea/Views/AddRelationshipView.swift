@@ -9,15 +9,15 @@ struct AddRelationshipView: View {
     @State private var amountText = ""
     @State private var type: RelationshipType = .debt
     @State private var note = ""
+    @State private var hasDueDate = false
+    @State private var dueDate = Date()
 
     private var amount: Decimal? {
-        let normalized = amountText.replacingOccurrences(of: ",", with: ".")
-        return Decimal(string: normalized)
+        Decimal(string: amountText.replacingOccurrences(of: ",", with: "."))
     }
 
     private var canSave: Bool {
-        !personName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        (amount ?? 0) > 0
+        !personName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (amount ?? 0) > 0
     }
 
     var body: some View {
@@ -33,28 +33,23 @@ struct AddRelationshipView: View {
 
                 Section("Dettagli") {
                     TextField("Persona", text: $personName)
+                    TextField("Importo", text: $amountText).keyboardType(.decimalPad)
+                    TextField("Nota (opzionale)", text: $note, axis: .vertical).lineLimit(2...4)
+                }
 
-                    TextField("Importo", text: $amountText)
-                        .keyboardType(.decimalPad)
-
-                    TextField("Nota (opzionale)", text: $note, axis: .vertical)
-                        .lineLimit(2...4)
+                Section("Scadenza") {
+                    Toggle("Imposta scadenza", isOn: $hasDueDate)
+                    if hasDueDate {
+                        DatePicker("Data", selection: $dueDate, displayedComponents: .date)
+                    }
                 }
             }
             .navigationTitle("Nuovo debito o credito")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Annulla") {
-                        dismiss()
-                    }
-                }
-
+                ToolbarItem(placement: .cancellationAction) { Button("Annulla") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Salva") {
-                        saveRelationship()
-                    }
-                    .disabled(!canSave)
+                    Button("Salva") { saveRelationship() }.disabled(!canSave)
                 }
             }
         }
@@ -62,15 +57,13 @@ struct AddRelationshipView: View {
 
     private func saveRelationship() {
         guard let amount, amount > 0 else { return }
-
-        let relationship = Relationship(
+        modelContext.insert(Relationship(
             personName: personName.trimmingCharacters(in: .whitespacesAndNewlines),
             amount: amount,
             type: type,
-            note: note.trimmingCharacters(in: .whitespacesAndNewlines)
-        )
-
-        modelContext.insert(relationship)
+            note: note.trimmingCharacters(in: .whitespacesAndNewlines),
+            dueDate: hasDueDate ? dueDate : nil
+        ))
         dismiss()
     }
 }
