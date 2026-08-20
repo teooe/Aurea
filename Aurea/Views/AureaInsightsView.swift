@@ -20,7 +20,9 @@ struct AureaInsightsView: View {
     private var monthExpenses: Decimal { expenseTotal(monthTransactions) }
     private var previousMonthExpenses: Decimal { expenseTotal(previousMonthTransactions) }
     private var monthIncome: Decimal { incomeTotal(monthTransactions) }
+    private var previousMonthIncome: Decimal { incomeTotal(previousMonthTransactions) }
     private var monthBalance: Decimal { monthIncome - monthExpenses }
+    private var previousMonthBalance: Decimal { previousMonthIncome - previousMonthExpenses }
     private var openRelationships: [Relationship] { relationships.filter { !$0.isClosed && $0.remainingAmount > 0 } }
     private var openDebts: Decimal { openRelationships.filter { $0.type == .debt }.reduce(0) { $0 + $1.remainingAmount } }
     private var openCredits: Decimal { openRelationships.filter { $0.type == .credit }.reduce(0) { $0 + $1.remainingAmount } }
@@ -40,15 +42,6 @@ struct AureaInsightsView: View {
                 Section("Questo mese") {
                     metric("Entrate", value: monthIncome, icon: "arrow.down.circle")
                     metric("Spese", value: monthExpenses, icon: "arrow.up.circle")
-                    if previousMonthExpenses > 0 {
-                        let delta = monthExpenses - previousMonthExpenses
-                        HStack {
-                            Label("Rispetto al mese scorso", systemImage: delta <= 0 ? "arrow.down.right" : "arrow.up.right")
-                            Spacer()
-                            Text(deltaText(delta))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
                     if let top = topExpenseCategory {
                         HStack {
                             Label("Categoria principale", systemImage: "tag")
@@ -61,6 +54,12 @@ struct AureaInsightsView: View {
                             }
                         }
                     }
+                }
+
+                Section("Confronto con il mese scorso") {
+                    comparisonRow("Entrate", current: monthIncome, previous: previousMonthIncome, icon: "arrow.down.circle")
+                    comparisonRow("Spese", current: monthExpenses, previous: previousMonthExpenses, icon: "arrow.up.circle")
+                    comparisonRow("Bilancio", current: monthBalance, previous: previousMonthBalance, icon: "equal.circle")
                 }
 
                 Section("Agenda") {
@@ -137,6 +136,25 @@ struct AureaInsightsView: View {
             Spacer()
             Text(value.formatted(.currency(code: "EUR")))
                 .fontWeight(.semibold)
+        }
+    }
+
+    private func comparisonRow(_ title: String, current: Decimal, previous: Decimal, icon: String) -> some View {
+        let delta = current - previous
+        return VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Label(title, systemImage: icon)
+                Spacer()
+                Text(current.formatted(.currency(code: "EUR")))
+                    .fontWeight(.semibold)
+            }
+            HStack {
+                Text("Mese scorso: \(previous.formatted(.currency(code: "EUR")))")
+                Spacer()
+                Text(deltaText(delta))
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
     }
 
