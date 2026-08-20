@@ -6,6 +6,7 @@ struct TodayCardView: View {
     let isExpanded: Bool
     let onTap: () -> Void
     let onSelectTransaction: (Transaction) -> Void
+    let onShowAll: () -> Void
 
     private var expenses: Decimal {
         transactions
@@ -70,44 +71,53 @@ struct TodayCardView: View {
                 }
                 .buttonStyle(.plain)
 
-                if isExpanded && !transactions.isEmpty {
-                    Divider()
+                if isExpanded {
+                    if !transactions.isEmpty {
+                        Divider()
 
-                    ForEach(transactions) { transaction in
-                        Button {
-                            onSelectTransaction(transaction)
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(transaction.title)
-                                        .fontWeight(.medium)
-                                        .foregroundStyle(.primary)
+                        ForEach(transactions) { transaction in
+                            Button {
+                                onSelectTransaction(transaction)
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(transaction.title)
+                                            .fontWeight(.medium)
+                                            .foregroundStyle(.primary)
 
-                                    HStack(spacing: 4) {
-                                        Text(transaction.category)
-                                        if let wallet = transaction.wallet {
-                                            Text("•")
-                                            Text(wallet.name)
+                                        HStack(spacing: 4) {
+                                            Text(transaction.category)
+                                            if let wallet = transaction.wallet {
+                                                Text("•")
+                                                Text(wallet.name)
+                                            }
                                         }
+                                        .font(.caption)
+                                        .foregroundStyle(Theme.Colors.secondaryText)
                                     }
-                                    .font(.caption)
-                                    .foregroundStyle(Theme.Colors.secondaryText)
+
+                                    Spacer()
+
+                                    Text(formattedAmount(for: transaction))
+                                        .fontWeight(.semibold)
+                                        .foregroundStyle(color(for: transaction))
+
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundStyle(Theme.Colors.secondaryText)
                                 }
-
-                                Spacer()
-
-                                Text(formattedAmount(for: transaction))
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(color(for: transaction))
-
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
-                                    .foregroundStyle(Theme.Colors.secondaryText)
+                                .contentShape(Rectangle())
                             }
-                            .contentShape(Rectangle())
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
+
+                    Button {
+                        onShowAll()
+                    } label: {
+                        Label("Tutti i movimenti", systemImage: "clock.arrow.circlepath")
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }
