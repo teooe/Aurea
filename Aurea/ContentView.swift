@@ -2,15 +2,19 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Query private var relationships: [Relationship]
     @Query private var budgets: [Budget]
     @Query private var recurringTransactions: [RecurringTransaction]
     @Query private var transactions: [Transaction]
 
     @AppStorage("aurea.onboarding.completed") private var onboardingCompleted = false
+    @AppStorage("aurea.appearance") private var appearanceRaw = AppAppearance.system.rawValue
     @State private var selection = 0
     @State private var previousSelection = 0
     @State private var showingQuickAdd = false
+
+    private var appearance: AppAppearance { AppAppearance(rawValue: appearanceRaw) ?? .system }
 
     var body: some View {
         TabView(selection: $selection) {
@@ -34,6 +38,7 @@ struct ContentView: View {
                 .tag(3)
                 .tabItem { Label("Aurea", systemImage: "sparkles") }
         }
+        .preferredColorScheme(appearance.colorScheme)
         .onChange(of: selection) { _, newValue in
             if newValue == 4 {
                 showingQuickAdd = true
@@ -42,13 +47,9 @@ struct ContentView: View {
                 previousSelection = newValue
             }
         }
-        .onAppear {
-            AppNotificationManager.refresh(
-                relationships: relationships,
-                recurring: recurringTransactions,
-                budgets: budgets,
-                transactions: transactions
-            )
+        .onAppear { refreshReminders() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { refreshReminders() }
         }
         .sheet(isPresented: $showingQuickAdd) { GlobalQuickAddView() }
         .fullScreenCover(isPresented: Binding(
@@ -57,6 +58,15 @@ struct ContentView: View {
         )) {
             OnboardingView()
         }
+    }
+
+    private func refreshReminders() {
+        AppNotificationManager.refresh(
+            relationships: relationships,
+            recurring: recurringTransactions,
+            budgets: budgets,
+            transactions: transactions
+        )
     }
 }
 
@@ -81,9 +91,7 @@ private struct HomeRootView: View {
             .padding(.trailing, 18)
             .accessibilityLabel("Impostazioni")
         }
-        .sheet(isPresented: $showingSettings) {
-            SettingsView()
-        }
+        .sheet(isPresented: $showingSettings) { SettingsView() }
     }
 }
 
