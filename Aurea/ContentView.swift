@@ -15,6 +15,7 @@ struct ContentView: View {
     @State private var showingQuickAdd = false
 
     private var appearance: AppAppearance { AppAppearance(rawValue: appearanceRaw) ?? .system }
+    private var isUITesting: Bool { ProcessInfo.processInfo.arguments.contains("-UITesting") }
 
     var body: some View {
         TabView(selection: $selection) {
@@ -47,13 +48,16 @@ struct ContentView: View {
                 previousSelection = newValue
             }
         }
-        .onAppear { refreshReminders() }
+        .onAppear {
+            if isUITesting { onboardingCompleted = true }
+            refreshReminders()
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { refreshReminders() }
         }
         .sheet(isPresented: $showingQuickAdd) { GlobalQuickAddView() }
         .fullScreenCover(isPresented: Binding(
-            get: { !onboardingCompleted },
+            get: { !onboardingCompleted && !isUITesting },
             set: { if !$0 { onboardingCompleted = true } }
         )) {
             OnboardingView()
