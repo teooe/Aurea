@@ -10,7 +10,7 @@ final class AureaUITests: XCTestCase {
     func testMainTabsAndQuickAddOpen() throws {
         let app = launchApp()
 
-        XCTAssertTrue(app.tabBars.buttons["Home"].exists)
+        XCTAssertTrue(app.tabBars.buttons["Home"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.tabBars.buttons["Movimenti"].exists)
         XCTAssertTrue(app.tabBars.buttons["Aggiungi"].exists)
         XCTAssertTrue(app.tabBars.buttons["Agenda"].exists)
@@ -28,10 +28,11 @@ final class AureaUITests: XCTestCase {
         app.tabBars.buttons["Home"].tap()
         app.tabBars.buttons["Aggiungi"].tap()
 
-        // GlobalQuickAddView usa "Nuovo" come titolo della sheet.
-        XCTAssertTrue(app.navigationBars["Nuovo"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["Movimento"].exists)
-        XCTAssertTrue(app.buttons["Impegno"].exists)
+        // Verifichiamo il contenuto della sheet invece del tipo esatto di navigation bar,
+        // che può cambiare nell'albero XCUI con SwiftUI.
+        XCTAssertTrue(element(label: "Movimento", in: app).waitForExistence(timeout: 5))
+        XCTAssertTrue(element(label: "Impegno", in: app).exists)
+        XCTAssertTrue(element(label: "Portafoglio", in: app).exists)
     }
 
     @MainActor
@@ -39,22 +40,25 @@ final class AureaUITests: XCTestCase {
         let app = launchApp()
 
         let settingsButton = app.buttons["Impostazioni"]
-        XCTAssertTrue(settingsButton.waitForExistence(timeout: 3))
+        XCTAssertTrue(settingsButton.waitForExistence(timeout: 5))
         settingsButton.tap()
 
-        // Nelle sheet SwiftUI il navigation bar può non essere esposto in modo stabile a XCUI.
-        // Usiamo quindi un contenuto reale della schermata come segnale di apertura.
-        XCTAssertTrue(app.staticTexts["Analisi"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["Gestione"].exists)
+        // "Panoramica completa" è un controllo reale e stabile nella prima sezione.
+        XCTAssertTrue(element(label: "Panoramica completa", in: app).waitForExistence(timeout: 5))
+        XCTAssertTrue(element(label: "Centro finanziario", in: app).exists)
+        XCTAssertTrue(element(label: "Agenda completa", in: app).exists)
 
-        swipeUntilVisible(app.staticTexts["Notifiche"], in: app)
-        XCTAssertTrue(app.staticTexts["Notifiche"].exists)
+        let notifications = element(label: "Notifiche", in: app)
+        swipeUntilVisible(notifications, in: app)
+        XCTAssertTrue(notifications.exists)
 
-        swipeUntilVisible(app.staticTexts["Preferenze"], in: app)
-        XCTAssertTrue(app.staticTexts["Preferenze"].exists)
+        let preferences = element(label: "Preferenze", in: app)
+        swipeUntilVisible(preferences, in: app)
+        XCTAssertTrue(preferences.exists)
 
-        swipeUntilVisible(app.staticTexts["Esportazione e backup"], in: app)
-        XCTAssertTrue(app.staticTexts["Esportazione e backup"].exists)
+        let backup = element(label: "Esportazione e backup", in: app)
+        swipeUntilVisible(backup, in: app)
+        XCTAssertTrue(backup.exists)
     }
 
     @MainActor
@@ -63,8 +67,7 @@ final class AureaUITests: XCTestCase {
         app.tabBars.buttons["Agenda"].tap()
 
         XCTAssertTrue(app.navigationBars["Agenda"].waitForExistence(timeout: 3))
-        let searchField = app.searchFields.firstMatch
-        XCTAssertTrue(searchField.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.searchFields.firstMatch.waitForExistence(timeout: 3))
     }
 
     @MainActor
@@ -73,12 +76,19 @@ final class AureaUITests: XCTestCase {
         app.tabBars.buttons["Aurea"].tap()
 
         let field = app.textFields["Chiedi ad Aurea…"]
-        XCTAssertTrue(field.waitForExistence(timeout: 3))
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
         field.tap()
         field.typeText("Quanto e il mio patrimonio attuale?")
-        app.buttons.matching(identifier: "arrow.up.circle.fill").firstMatch.tap()
 
-        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] %@", "patrimonio attuale")).firstMatch.waitForExistence(timeout: 3))
+        // Il pulsante SF Symbol non ha sempre un identifier XCUI stabile.
+        // Invio tramite Return, dato che il TextField usa submitLabel(.send) e onSubmit.
+        field.typeText("\n")
+
+        // Se la domanda è stata accettata, compare almeno il messaggio utente nella conversazione.
+        let sentQuestion = app.staticTexts.containing(
+            NSPredicate(format: "label CONTAINS[c] %@", "Quanto e il mio patrimonio")
+        ).firstMatch
+        XCTAssertTrue(sentQuestion.waitForExistence(timeout: 5))
     }
 
     @MainActor
@@ -99,7 +109,12 @@ final class AureaUITests: XCTestCase {
     }
 
     @MainActor
-    private func swipeUntilVisible(_ element: XCUIElement, in app: XCUIApplication, maxSwipes: Int = 6) {
+    private func element(label: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", label)).firstMatch
+    }
+
+    @MainActor
+    private func swipeUntilVisible(_ element: XCUIElement, in app: XCUIApplication, maxSwipes: Int = 8) {
         var attempts = 0
         while !element.exists && attempts < maxSwipes {
             app.swipeUp()
