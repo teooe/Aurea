@@ -1,6 +1,6 @@
 import SwiftUI
 import SwiftData
-import UniformTypeIdentifiers
+import UIKit
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
@@ -23,10 +23,7 @@ struct SettingsView: View {
     @State private var showingQuickAdd = false
     @State private var showingInsights = false
     @State private var showingOnboarding = false
-    @State private var exportCSV = false
-    @State private var exportBackup = false
-    @State private var csvDocument = AureaTextDocument(text: "")
-    @State private var backupDocument = AureaTextDocument(text: "")
+    @State private var exportItem: ExportItem?
 
     private var openAgendaItems: Int { agendaItems.filter { !$0.isCompleted }.count }
     private var activeWallets: Int { wallets.filter { !$0.isArchived }.count }
@@ -90,12 +87,10 @@ struct SettingsView: View {
 
                 Section {
                     Button {
-                        csvDocument = AureaTextDocument(text: makeCSV())
-                        exportCSV = true
+                        exportText(makeCSV(), filename: "Aurea-Movimenti.csv")
                     } label: { Label("Esporta movimenti CSV", systemImage: "tablecells") }
                     Button {
-                        backupDocument = AureaTextDocument(text: makeBackupJSON())
-                        exportBackup = true
+                        exportText(makeBackupJSON(), filename: "Aurea-Backup.json")
                     } label: { Label("Crea backup JSON", systemImage: "externaldrive") }
                 } header: {
                     Text("Esportazione e backup")
@@ -130,8 +125,9 @@ struct SettingsView: View {
             .sheet(isPresented: $showingAgenda) { AgendaView() }
             .sheet(isPresented: $showingQuickAdd) { GlobalQuickAddView() }
             .fullScreenCover(isPresented: $showingOnboarding) { OnboardingView() }
-            .fileExporter(isPresented: $exportCSV, document: csvDocument, contentType: .commaSeparatedText, defaultFilename: "Aurea-Movimenti") { _ in }
-            .fileExporter(isPresented: $exportBackup, document: backupDocument, contentType: .json, defaultFilename: "Aurea-Backup") { _ in }
+            .sheet(item: $exportItem) { item in
+                ActivityView(activityItems: [item.url])
+            }
             .onChange(of: relationshipNotifications) { _, _ in refreshReminders() }
             .onChange(of: recurringNotifications) { _, _ in refreshReminders() }
             .onChange(of: budgetNotifications) { _, _ in refreshReminders() }
@@ -150,6 +146,16 @@ struct SettingsView: View {
 
     private func dataRow(_ title: String, value: Int, icon: String) -> some View {
         HStack { Label(title, systemImage: icon); Spacer(); Text("\(value)").foregroundStyle(.secondary).monospacedDigit() }
+    }
+
+    private func exportText(_ text: String, filename: String) {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+        do {
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            exportItem = ExportItem(url: url)
+        } catch {
+            print("Export failed: \(error)")
+        }
     }
 
     private func makeCSV() -> String {
@@ -185,10 +191,17 @@ struct SettingsView: View {
     }
 }
 
-struct AureaTextDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.plainText, .commaSeparatedText, .json] }
-    var text: String
-    init(text: String) { self.text = text }
-    init(configuration: ReadConfiguration) throws { text = configuration.file.regularFileContents.flatMap { String(data: $0, encoding: .utf8) } ?? "" }
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: Data(text.utf8)) }
+private struct ExportItem: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+private struct ActivityView: UIViewControllerRepresentable {
+    let activityItems: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
