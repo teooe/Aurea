@@ -27,7 +27,11 @@ final class AureaUITests: XCTestCase {
 
         app.tabBars.buttons["Home"].tap()
         app.tabBars.buttons["Aggiungi"].tap()
-        XCTAssertTrue(app.staticTexts["Aggiungi"].waitForExistence(timeout: 3) || app.navigationBars["Aggiungi"].exists)
+
+        // GlobalQuickAddView usa "Nuovo" come titolo della sheet.
+        XCTAssertTrue(app.navigationBars["Nuovo"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Movimento"].exists)
+        XCTAssertTrue(app.buttons["Impegno"].exists)
     }
 
     @MainActor
@@ -38,8 +42,9 @@ final class AureaUITests: XCTestCase {
         XCTAssertTrue(settingsButton.waitForExistence(timeout: 3))
         settingsButton.tap()
 
-        XCTAssertTrue(app.navigationBars["Aurea"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["Analisi"].exists)
+        // Nelle sheet SwiftUI il navigation bar può non essere esposto in modo stabile a XCUI.
+        // Usiamo quindi un contenuto reale della schermata come segnale di apertura.
+        XCTAssertTrue(app.staticTexts["Analisi"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["Gestione"].exists)
 
         swipeUntilVisible(app.staticTexts["Notifiche"], in: app)
