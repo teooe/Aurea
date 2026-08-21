@@ -8,10 +8,9 @@ struct RelationshipDetailView: View {
 
     let relationship: Relationship
     @State private var showingPayment = false
+    @State private var showingDeleteConfirmation = false
 
-    private var relationshipPayments: [RelationshipPayment] {
-        payments.filter { $0.relationshipID == relationship.id }
-    }
+    private var relationshipPayments: [RelationshipPayment] { payments.filter { $0.relationshipID == relationship.id } }
 
     var body: some View {
         NavigationStack {
@@ -21,13 +20,8 @@ struct RelationshipDetailView: View {
                     LabeledContent(relationship.type == .debt ? "Debito" : "Credito", value: relationship.amount.formatted(.currency(code: "EUR")))
                     LabeledContent("Già saldato", value: relationship.repaid.formatted(.currency(code: "EUR")))
                     LabeledContent("Residuo", value: relationship.remainingAmount.formatted(.currency(code: "EUR")))
-
-                    if !relationship.note.isEmpty {
-                        LabeledContent("Nota", value: relationship.note)
-                    }
-                    if let dueDate = relationship.dueDate {
-                        LabeledContent("Scadenza", value: dueDate.formatted(date: .abbreviated, time: .omitted))
-                    }
+                    if !relationship.note.isEmpty { LabeledContent("Nota", value: relationship.note) }
+                    if let dueDate = relationship.dueDate { LabeledContent("Scadenza", value: dueDate.formatted(date: .abbreviated, time: .omitted)) }
                     LabeledContent("Creato", value: relationship.createdAt.formatted(date: .abbreviated, time: .omitted))
                     LabeledContent("Stato", value: relationship.isClosed ? "Saldato" : "Aperto")
                 }
@@ -35,11 +29,7 @@ struct RelationshipDetailView: View {
                 if !relationshipPayments.isEmpty {
                     Section("Pagamenti") {
                         ForEach(relationshipPayments) { payment in
-                            HStack {
-                                Text(payment.date.formatted(date: .abbreviated, time: .omitted))
-                                Spacer()
-                                Text(payment.amount, format: .currency(code: "EUR"))
-                            }
+                            HStack { Text(payment.date.formatted(date: .abbreviated, time: .omitted)); Spacer(); Text(payment.amount, format: .currency(code: "EUR")) }
                             .swipeActions {
                                 Button("Elimina", role: .destructive) {
                                     relationship.paidAmount = max(relationship.repaid - payment.amount, 0)
@@ -53,47 +43,35 @@ struct RelationshipDetailView: View {
 
                 if !relationship.isClosed {
                     Section {
-                        Button { showingPayment = true } label: {
-                            Label("Registra pagamento parziale", systemImage: "eurosign.circle")
-                        }
+                        Button { showingPayment = true } label: { Label("Registra pagamento parziale", systemImage: "eurosign.circle") }
                         Button {
                             let remaining = relationship.remainingAmount
-                            if remaining > 0 {
-                                modelContext.insert(RelationshipPayment(relationshipID: relationship.id, amount: remaining))
-                            }
+                            if remaining > 0 { modelContext.insert(RelationshipPayment(relationshipID: relationship.id, amount: remaining)) }
                             relationship.paidAmount = relationship.amount
                             relationship.isClosed = true
-                        } label: {
-                            Label("Segna come saldato", systemImage: "checkmark.circle")
-                        }
+                        } label: { Label("Segna come saldato", systemImage: "checkmark.circle") }
                     }
                 } else {
-                    Section {
-                        Button { relationship.isClosed = false } label: {
-                            Label("Riapri", systemImage: "arrow.uturn.backward.circle")
-                        }
-                    }
+                    Section { Button { relationship.isClosed = false } label: { Label("Riapri", systemImage: "arrow.uturn.backward.circle") } }
                 }
 
-                Section {
-                    Button(role: .destructive) {
-                        for payment in relationshipPayments { modelContext.delete(payment) }
-                        modelContext.delete(relationship)
-                        dismiss()
-                    } label: {
-                        Label("Elimina", systemImage: "trash")
-                    }
-                }
+                Section { Button(role: .destructive) { showingDeleteConfirmation = true } label: { Label("Elimina", systemImage: "trash") } }
             }
             .navigationTitle("Dettaglio")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Chiudi") { dismiss() } }
-            }
-            .sheet(isPresented: $showingPayment) {
-                AddRelationshipPaymentView(relationship: relationship)
-            }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Chiudi") { dismiss() } } }
+            .sheet(isPresented: $showingPayment) { AddRelationshipPaymentView(relationship: relationship) }
+            .confirmationDialog("Eliminare \(relationship.type == .debt ? "questo debito" : "questo credito")?", isPresented: $showingDeleteConfirmation, titleVisibility: .visible) {
+                Button("Elimina", role: .destructive) { deleteRelationship() }
+                Button("Annulla", role: .cancel) { }
+            } message: { Text("Verrà eliminato anche lo storico dei pagamenti collegati.") }
         }
+    }
+
+    private func deleteRelationship() {
+        for payment in relationshipPayments { modelContext.delete(payment) }
+        modelContext.delete(relationship)
+        dismiss()
     }
 }
 
@@ -111,8 +89,7 @@ private struct AddRelationshipPaymentView: View {
             Form {
                 TextField("Importo", text: $amountText).keyboardType(.decimalPad)
                 DatePicker("Data", selection: $date, displayedComponents: .date)
-                Text("Residuo: \(relationship.remainingAmount.formatted(.currency(code: "EUR")))")
-                    .foregroundStyle(.secondary)
+                Text("Residuo: \(relationship.remainingAmount.formatted(.currency(code: "EUR")))").foregroundStyle(.secondary)
             }
             .navigationTitle("Pagamento")
             .toolbar {
