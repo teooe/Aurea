@@ -1,1 +1,0 @@
-Aurea v1 App Icon: Orizzonte 6.2. Primary 1024×1024 asset is Aurea-AppIcon.png.
