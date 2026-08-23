@@ -13,31 +13,41 @@ struct ContentView: View {
     @State private var selection = 0
     @State private var previousSelection = 0
     @State private var showingQuickAdd = false
+    @State private var showingBrandSplash = true
 
     private var appearance: AppAppearance { AppAppearance(rawValue: appearanceRaw) ?? .system }
     private var isUITesting: Bool { ProcessInfo.processInfo.arguments.contains("-UITesting") }
 
     var body: some View {
-        TabView(selection: $selection) {
-            HomeRootView()
-                .tag(0)
-                .tabItem { Label("Home", systemImage: "house") }
+        ZStack {
+            TabView(selection: $selection) {
+                HomeRootView()
+                    .tag(0)
+                    .tabItem { Label("Home", systemImage: "house") }
 
-            TransactionsView()
-                .tag(1)
-                .tabItem { Label("Movimenti", systemImage: "arrow.left.arrow.right") }
+                TransactionsView()
+                    .tag(1)
+                    .tabItem { Label("Movimenti", systemImage: "arrow.left.arrow.right") }
 
-            Color.clear
-                .tag(4)
-                .tabItem { Label("Aggiungi", systemImage: "plus.circle.fill") }
+                Color.clear
+                    .tag(4)
+                    .tabItem { Label("Aggiungi", systemImage: "plus.circle.fill") }
 
-            AgendaView(embedded: true)
-                .tag(2)
-                .tabItem { Label("Agenda", systemImage: "calendar") }
+                AgendaView(embedded: true)
+                    .tag(2)
+                    .tabItem { Label("Agenda", systemImage: "calendar") }
 
-            AureaAssistantView()
-                .tag(3)
-                .tabItem { Label("Aurea", systemImage: "sparkles") }
+                AureaAssistantView()
+                    .tag(3)
+                    .tabItem { Label("Aurea", systemImage: "sparkles") }
+            }
+            .opacity(showingBrandSplash && !isUITesting ? 0 : 1)
+
+            if showingBrandSplash && !isUITesting {
+                BrandSplashView()
+                    .transition(.opacity)
+                    .zIndex(10)
+            }
         }
         .preferredColorScheme(appearance.colorScheme)
         .onChange(of: selection) { _, newValue in
@@ -49,7 +59,17 @@ struct ContentView: View {
             }
         }
         .onAppear {
-            if isUITesting { onboardingCompleted = true }
+            if isUITesting {
+                onboardingCompleted = true
+                showingBrandSplash = false
+            } else {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(900))
+                    withAnimation(.easeOut(duration: 0.28)) {
+                        showingBrandSplash = false
+                    }
+                }
+            }
             refreshReminders()
         }
         .onChange(of: scenePhase) { _, phase in
@@ -57,7 +77,7 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingQuickAdd) { GlobalQuickAddView() }
         .fullScreenCover(isPresented: Binding(
-            get: { !onboardingCompleted && !isUITesting },
+            get: { !onboardingCompleted && !isUITesting && !showingBrandSplash },
             set: { if !$0 { onboardingCompleted = true } }
         )) {
             OnboardingView()
