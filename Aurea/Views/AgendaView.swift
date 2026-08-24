@@ -84,7 +84,7 @@ struct AgendaView: View {
             }.foregroundStyle(item.isCompleted ? .secondary : .primary)
         }
     }
-    private func timeText(for item: AgendaItem) -> String { guard item.hasTime else { return "Tutto il giorno" }; let start = item.date.formatted(date: .omitted, time: .shortened); guard item.type == .event, let end = item.endDate else { return start }; return "\(start)–\(end.formatted(date: .omitted, time: .shortened))" }
+    private func timeText(for item: AgendaItem) -> String { guard item.hasTime else { return "Tutto il giorno" }; let start = item.date.formatted(date: .omitted, time: .shortened); guard let end = item.endDate else { return start }; return "\(start)–\(end.formatted(date: .omitted, time: .shortened))" }
     private func normalizeRecurringEvents() { for item in items where item.type == .event && item.repeatRule != .never && item.date < Date() { let duration = item.endDate?.timeIntervalSince(item.date); var next = item.date; while next < Date() { next = item.repeatRule.nextDate(after: next) }; item.date = next; if let duration { item.endDate = next.addingTimeInterval(duration) }; AgendaNotificationManager.schedule(for: item) } }
 }
 
@@ -113,7 +113,7 @@ struct AddAgendaItemView: View {
                 Section("Tipo") { Picker("Tipo", selection: $type) { ForEach(AgendaItemType.allCases) { Label($0.title, systemImage: $0.icon).tag($0) } }.pickerStyle(.segmented) }
                 Section("Dettagli") {
                     TextField("Titolo", text: $title); TextField("Note (opzionale)", text: $note, axis: .vertical); DatePicker("Data", selection: $date, displayedComponents: .date); Toggle("Orario", isOn: $hasTime)
-                    if hasTime { DatePicker(type == .event ? "Inizio" : "Ora", selection: $date, displayedComponents: .hourAndMinute); if type == .event { Toggle("Ora di fine", isOn: $hasEndTime); if hasEndTime { DatePicker("Fine", selection: $endDate, in: date..., displayedComponents: [.date,.hourAndMinute]) } } }
+                    if hasTime { DatePicker(type == .deadline ? "Ora" : "Inizio", selection: $date, displayedComponents: .hourAndMinute); if type != .deadline { Toggle("Ora di fine", isOn: $hasEndTime); if hasEndTime { DatePicker("Fine", selection: $endDate, in: date..., displayedComponents: [.date,.hourAndMinute]) } } }
                     Picker("Priorità", selection: $priority) { ForEach(AgendaPriority.allCases) { Text($0.title).tag($0) } }
                 }
                 Section("Ripetizione") { Picker("Ripeti", selection: $repeatRule) { ForEach(AgendaRepeat.allCases) { Text($0.title).tag($0) } } }
@@ -122,10 +122,10 @@ struct AddAgendaItemView: View {
             .navigationTitle("Nuovo impegno").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Annulla") { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button("Salva") { save() }.disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) } }
             .onChange(of: date) { oldValue, newValue in if hasEndTime && endDate < newValue { endDate = newValue.addingTimeInterval(3600) } else if hasEndTime { endDate = endDate.addingTimeInterval(newValue.timeIntervalSince(oldValue)) } }
-            .onChange(of: type) { _, newType in if newType != .event { hasEndTime = false } }
+            .onChange(of: type) { _, newType in if newType == .deadline { hasEndTime = false } }
         }
     }
-    private func save() { let item = AgendaItem(title: title.trimmingCharacters(in: .whitespacesAndNewlines), note: note.trimmingCharacters(in: .whitespacesAndNewlines), type: type, date: date, hasTime: hasTime, endDate: type == .event && hasTime && hasEndTime ? endDate : nil, repeatRule: repeatRule, reminderMinutesBefore: hasTime && reminder != 0 ? reminder : nil, priority: priority); modelContext.insert(item); AgendaNotificationManager.schedule(for: item); dismiss() }
+    private func save() { let item = AgendaItem(title: title.trimmingCharacters(in: .whitespacesAndNewlines), note: note.trimmingCharacters(in: .whitespacesAndNewlines), type: type, date: date, hasTime: hasTime, endDate: type != .deadline && hasTime && hasEndTime ? endDate : nil, repeatRule: repeatRule, reminderMinutesBefore: hasTime && reminder != 0 ? reminder : nil, priority: priority); modelContext.insert(item); AgendaNotificationManager.schedule(for: item); dismiss() }
 }
 
 struct AgendaItemDetailView: View {
@@ -136,8 +136,8 @@ struct AgendaItemDetailView: View {
                 Section("Impegno") {
                     LabeledContent("Tipo", value: item.type.title); LabeledContent("Titolo", value: item.title)
                     LabeledContent("Data", value: item.date.formatted(date: .long, time: .omitted))
-                    if item.hasTime { LabeledContent(item.type == .event && item.endDate != nil ? "Orario" : "Ora", value: timeText) }
-                    if item.type == .event, let end = item.endDate, !Calendar.current.isDate(end, inSameDayAs: item.date) { LabeledContent("Fine", value: end.formatted(date: .long, time: .shortened)) }
+                    if item.hasTime { LabeledContent(item.endDate != nil ? "Orario" : "Ora", value: timeText) }
+                    if let end = item.endDate, !Calendar.current.isDate(end, inSameDayAs: item.date) { LabeledContent("Fine", value: end.formatted(date: .long, time: .shortened)) }
                     LabeledContent("Priorità", value: item.priority.title); if !item.note.isEmpty { LabeledContent("Note", value: item.note) }; if item.repeatRule != .never { LabeledContent("Ripetizione", value: item.repeatRule.title) }
                 }
                 Section { Button { showingEdit = true } label: { Label("Modifica impegno", systemImage: "pencil") } }
@@ -151,7 +151,22 @@ struct AgendaItemDetailView: View {
     }
     private var timeText: String { let start = item.date.formatted(date: .omitted, time: .shortened); guard let end = item.endDate else { return start }; return "\(start)–\(end.formatted(date: .omitted, time: .shortened))" }
     private var completionTitle: String { item.isCompleted ? "Segna da fare" : (item.repeatRule == .never ? "Segna come completato" : "Completa e passa alla prossima") }
-    private func toggleCompletion() { if item.isCompleted { item.isCompleted = false; AgendaNotificationManager.schedule(for: item) } else if item.repeatRule != .never { var next = item.repeatRule.nextDate(after: item.date); while next <= Date() { next = item.repeatRule.nextDate(after: next) }; item.date = next; AgendaNotificationManager.schedule(for: item) } else { item.isCompleted = true; AgendaNotificationManager.remove(for: item) } }
+    private func toggleCompletion() {
+        if item.isCompleted {
+            item.isCompleted = false
+            AgendaNotificationManager.schedule(for: item)
+        } else if item.repeatRule != .never {
+            let duration = item.endDate?.timeIntervalSince(item.date)
+            var next = item.repeatRule.nextDate(after: item.date)
+            while next <= Date() { next = item.repeatRule.nextDate(after: next) }
+            item.date = next
+            if let duration { item.endDate = next.addingTimeInterval(duration) }
+            AgendaNotificationManager.schedule(for: item)
+        } else {
+            item.isCompleted = true
+            AgendaNotificationManager.remove(for: item)
+        }
+    }
 }
 
 extension AgendaRepeat { func nextDate(after date: Date) -> Date { let c = Calendar.current; switch self { case .never:return date; case .daily:return c.date(byAdding:.day,value:1,to:date) ?? date; case .weekly:return c.date(byAdding:.weekOfYear,value:1,to:date) ?? date; case .monthly:return c.date(byAdding:.month,value:1,to:date) ?? date; case .yearly:return c.date(byAdding:.year,value:1,to:date) ?? date } } }
