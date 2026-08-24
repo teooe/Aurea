@@ -38,8 +38,8 @@ struct EditAgendaItemView: View {
                     DatePicker("Data", selection: $date, displayedComponents: .date)
                     Toggle("Orario", isOn: $hasTime)
                     if hasTime {
-                        DatePicker("Inizio", selection: $date, displayedComponents: .hourAndMinute)
-                        if type == .event {
+                        DatePicker(type == .deadline ? "Ora" : "Inizio", selection: $date, displayedComponents: .hourAndMinute)
+                        if type != .deadline {
                             Toggle("Ora di fine", isOn: $hasEndTime)
                             if hasEndTime { DatePicker("Fine", selection: $endDate, in: date..., displayedComponents: [.date, .hourAndMinute]) }
                         }
@@ -55,7 +55,7 @@ struct EditAgendaItemView: View {
                 if hasEndTime && endDate < newValue { endDate = newValue.addingTimeInterval(3600) }
                 else if hasEndTime { endDate = endDate.addingTimeInterval(newValue.timeIntervalSince(oldValue)) }
             }
-            .onChange(of: type) { _, newType in if newType != .event { hasEndTime = false } }
+            .onChange(of: type) { _, newType in if newType == .deadline { hasEndTime = false } }
         }
     }
 
@@ -65,7 +65,7 @@ struct EditAgendaItemView: View {
         item.type = type
         item.date = date
         item.hasTime = hasTime
-        item.endDate = type == .event && hasTime && hasEndTime ? endDate : nil
+        item.endDate = type != .deadline && hasTime && hasEndTime ? endDate : nil
         item.repeatRule = repeatRule
         item.reminderMinutesBefore = hasTime && reminder != 0 ? reminder : nil
         item.priority = priority
