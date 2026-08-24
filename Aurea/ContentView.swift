@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -49,6 +50,7 @@ struct ContentView: View {
                     .zIndex(10)
             }
         }
+        .background(KeyboardDismissInstaller())
         .preferredColorScheme(appearance.colorScheme)
         .onChange(of: selection) { _, newValue in
             if newValue == 4 {
@@ -91,6 +93,71 @@ struct ContentView: View {
             budgets: budgets,
             transactions: transactions
         )
+    }
+}
+
+private struct KeyboardDismissInstaller: UIViewRepresentable {
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIView(context: Context) -> KeyboardDismissHostView {
+        let view = KeyboardDismissHostView()
+        view.onAttachedToWindow = { window in
+            context.coordinator.install(in: window)
+        }
+        return view
+    }
+
+    func updateUIView(_ uiView: KeyboardDismissHostView, context: Context) {}
+
+    static func dismantleUIView(_ uiView: KeyboardDismissHostView, coordinator: Coordinator) {
+        coordinator.uninstall()
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        weak var installedWindow: UIWindow?
+        weak var tapGesture: UITapGestureRecognizer?
+
+        func install(in window: UIWindow) {
+            guard installedWindow !== window else { return }
+            uninstall()
+
+            let tap = UITapGestureRecognizer(target: self, action: #selector(dismissKeyboard))
+            tap.cancelsTouchesInView = false
+            tap.delegate = self
+            window.addGestureRecognizer(tap)
+            installedWindow = window
+            tapGesture = tap
+        }
+
+        func uninstall() {
+            if let tapGesture, let installedWindow {
+                installedWindow.removeGestureRecognizer(tapGesture)
+            }
+            tapGesture = nil
+            installedWindow = nil
+        }
+
+        @objc private func dismissKeyboard() {
+            installedWindow?.endEditing(true)
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            var view: UIView? = touch.view
+            while let current = view {
+                if current is UITextField || current is UITextView { return false }
+                view = current.superview
+            }
+            return true
+        }
+    }
+}
+
+private final class KeyboardDismissHostView: UIView {
+    var onAttachedToWindow: ((UIWindow) -> Void)?
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if let window { onAttachedToWindow?(window) }
     }
 }
 
