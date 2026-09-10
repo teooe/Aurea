@@ -34,10 +34,6 @@ struct ContentView: View {
                     .tag(4)
                     .tabItem { Label("Aggiungi", systemImage: "plus.circle.fill") }
 
-                AgendaView(embedded: true)
-                    .tag(2)
-                    .tabItem { Label("Agenda", systemImage: "calendar") }
-
                 AureaAssistantView()
                     .tag(3)
                     .tabItem { Label("Aurea", systemImage: "sparkles") }
