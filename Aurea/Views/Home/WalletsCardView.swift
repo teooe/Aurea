@@ -33,38 +33,7 @@ struct WalletsCardView: View {
                             Button {
                                 onSelectWallet(wallet)
                             } label: {
-                                VStack(spacing: Theme.Spacing.small) {
-                                    HStack {
-                                        Label(wallet.name, systemImage: wallet.icon)
-                                            .foregroundStyle(.primary)
-
-                                        Spacer()
-
-                                        Text(
-                                            FinancialEngine.balance(for: wallet),
-                                            format: .currency(code: wallet.currencyCode)
-                                        )
-                                        .fontWeight(.medium)
-                                        .foregroundStyle(.primary)
-
-                                        Image(systemName: "chevron.right")
-                                            .font(.caption)
-                                            .foregroundStyle(Theme.Colors.secondaryText)
-                                    }
-
-                                    HStack {
-                                        Text(wallet.currencyCode)
-                                        Spacer()
-                                        Text("Saldo iniziale")
-                                        Text(
-                                            wallet.initialBalance,
-                                            format: .currency(code: wallet.currencyCode)
-                                        )
-                                    }
-                                    .font(.caption)
-                                    .foregroundStyle(Theme.Colors.secondaryText)
-                                }
-                                .contentShape(Rectangle())
+                                WalletRow(wallet: wallet)
                             }
                             .buttonStyle(.plain)
                         }
@@ -78,5 +47,45 @@ struct WalletsCardView: View {
                 }
             }
         }
+    }
+}
+
+private struct WalletRow: View {
+
+    let wallet: Wallet
+
+    var body: some View {
+        VStack(spacing: Theme.Spacing.small) {
+            HStack {
+                Label(wallet.name, systemImage: wallet.icon)
+                    .foregroundStyle(.primary)
+
+                Spacer()
+
+                Text(
+                    FinancialEngine.balance(for: wallet),
+                    format: .currency(code: wallet.currencyCode)
+                )
+                .fontWeight(.medium)
+                .foregroundStyle(.primary)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+            }
+
+            HStack {
+                Text(wallet.currencyCode)
+                Spacer()
+                Text("Saldo iniziale")
+                Text(
+                    wallet.initialBalance,
+                    format: .currency(code: wallet.currencyCode)
+                )
+            }
+            .font(.caption)
+            .foregroundStyle(Theme.Colors.secondaryText)
+        }
+        .contentShape(Rectangle())
     }
 }
