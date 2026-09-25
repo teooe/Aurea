@@ -16,6 +16,7 @@ struct ContentView: View {
     @State private var previousSelection = 0
     @State private var showingQuickAdd = false
     @State private var showingBrandSplash = true
+    private let quickAddRequest = QuickAddRequest.shared
 
     private var appearance: AppAppearance { AppAppearance(rawValue: appearanceRaw) ?? .system }
     private var isUITesting: Bool { ProcessInfo.processInfo.arguments.contains("-UITesting") }
@@ -72,7 +73,24 @@ struct ContentView: View {
             refreshData()
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { refreshData() }
+            switch phase {
+            case .active: refreshData()
+            // Uscendo dall'app il widget riceve i dati aggiornati con le modifiche appena fatte.
+            case .background: WidgetSnapshotBuilder.refresh(in: modelContext)
+            default: break
+            }
+        }
+        .onChange(of: quickAddRequest.isPending, initial: true) { _, pending in
+            if pending {
+                showingQuickAdd = true
+                quickAddRequest.isPending = false
+            }
+        }
+        .onOpenURL { url in
+            // Link del widget: aurea://nuovo-movimento
+            if url.scheme == "aurea" && url.host() == "nuovo-movimento" {
+                showingQuickAdd = true
+            }
         }
         .sheet(isPresented: $showingQuickAdd) { QuickAddView() }
         .fullScreenCover(isPresented: Binding(
@@ -86,6 +104,7 @@ struct ContentView: View {
     private func refreshData() {
         CategoryService.synchronize(in: modelContext)
         RecurringEngine.generateDueTransactions(from: recurringTransactions, in: modelContext)
+        WidgetSnapshotBuilder.refresh(in: modelContext)
         refreshReminders()
     }
 

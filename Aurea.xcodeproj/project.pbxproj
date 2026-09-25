@@ -187,10 +187,10 @@
 				};
 			};
 			buildConfigurationList = CB6248C2302EF0B100285328 /* Build configuration list for PBXProject "Aurea" */;
-			developmentRegion = en;
+			developmentRegion = it;
 			hasScannedForEncodings = 0;
 			knownRegions = (
-				en,
+				it,
 				Base,
 			);
 			mainGroup = CB6248BE302EF0B100285328;

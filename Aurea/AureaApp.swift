@@ -10,26 +10,7 @@ import SwiftData
 
 @main
 struct AureaApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Wallet.self,
-            Transaction.self,
-            Relationship.self,
-            RelationshipPayment.self,
-            Goal.self,
-            FinanceCategory.self,
-            Budget.self,
-            RecurringTransaction.self,
-            AgendaItem.self,
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            fatalError("Could not create ModelContainer: \(error)")
-        }
-    }()
+    var sharedModelContainer: ModelContainer { AureaStore.container }
 
     var body: some Scene {
         WindowGroup {

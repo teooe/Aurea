@@ -286,6 +286,49 @@ struct AureaTests {
         #expect(CSVExporter.escape("a\nb") == "\"a\nb\"")
     }
 
+    @Test func siriAmountIsRoundedToCents() {
+        #expect(IntentAmount.decimal(from: 12.3) == Decimal(string: "12.3")!)
+        #expect(IntentAmount.decimal(from: 0.1) == Decimal(string: "0.1")!)
+        #expect(IntentAmount.decimal(from: 9.999) == 10)
+    }
+
+    @MainActor
+    @Test func siriWalletMatchesByNameOrFallsBackToFirst() {
+        let main = Wallet(name: "Conto", icon: "wallet.pass")
+        let card = Wallet(name: "Carta", icon: "creditcard")
+        #expect(IntentAmount.wallet(named: nil, in: [main, card]) === main)
+        #expect(IntentAmount.wallet(named: " carta ", in: [main, card]) === card)
+        #expect(IntentAmount.wallet(named: "Inesistente", in: [main, card]) == nil)
+    }
+
+    @Test func widgetSnapshotSummarizesCurrentMonth() {
+        let calendar = Calendar.current
+        let now = Date.now
+        let lastMonth = calendar.date(byAdding: .month, value: -1, to: now)!
+        let wallet = Wallet(name: "Conto", icon: "wallet.pass")
+        let items = [
+            Transaction(type: .expense, amount: 30, date: now, category: "Cibo", title: "Oggi", wallet: wallet),
+            Transaction(type: .income, amount: 1000, date: now, category: "Stipendio", title: "Stipendio", wallet: wallet),
+            Transaction(type: .expense, amount: 999, date: lastMonth, category: "Cibo", title: "Mese scorso", wallet: wallet),
+            Transaction(type: .expense, amount: 200, date: now, category: Transaction.transferCategory, title: "Giroconto", wallet: wallet, transferGroupID: UUID()),
+        ]
+        let budgets = [
+            Budget(title: "Cibo", category: "Cibo", monthlyLimit: 40),
+            Budget(title: "Totale", monthlyLimit: 1000),
+            Budget(title: "Archiviato", monthlyLimit: 10, isArchived: true),
+        ]
+
+        let snapshot = WidgetSnapshotBuilder.make(transactions: items, budgets: budgets, now: now, calendar: calendar)
+
+        #expect(snapshot.monthExpenses == 30)
+        #expect(snapshot.monthIncome == 1000)
+        #expect(snapshot.expensesToday(at: now, calendar: calendar) == 30)
+        #expect(snapshot.budgets.map(\.title) == ["Cibo", "Totale"])
+        #expect(snapshot.isCurrentMonth(at: now, calendar: calendar))
+        #expect(!snapshot.isCurrentMonth(at: calendar.date(byAdding: .month, value: 1, to: now)!, calendar: calendar))
+        #expect(snapshot.expensesToday(at: calendar.date(byAdding: .day, value: 1, to: now)!, calendar: calendar) == 0)
+    }
+
     @Test func relationshipRemainingAmountNeverBecomesNegative() {
         let relationship = Relationship(personName: "Luca", amount: 100, type: .debt, paidAmount: 40)
         #expect(relationship.remainingAmount == 60)
