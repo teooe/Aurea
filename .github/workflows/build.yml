@@ -1,0 +1,71 @@
+name: Build e test
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Compila e testa su simulatore iOS
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scegli la versione di Xcode più recente
+        run: |
+          ls -d /Applications/Xcode*.app
+          XCODE="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+          xcrun --sdk iphonesimulator --show-sdk-version
+
+      - name: Prepara simulatore e versione minima
+        id: env
+        run: |
+          # Il progetto richiede iOS 26.5: se l'SDK del runner è più vecchio, si compila per quello.
+          SDK="$(xcrun --sdk iphonesimulator --show-sdk-version)"
+          TARGET="$(printf '%s\n%s\n' "$SDK" 26.5 | sort -V | head -1)"
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+          DEVICE_ID="$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; ids=[x["udid"] for k,v in sorted(d.items(), reverse=True) if "iOS" in k for x in v if x["name"].startswith("iPhone")]; print(ids[0] if ids else "")')"
+          echo "device=$DEVICE_ID" >> "$GITHUB_OUTPUT"
+          echo "SDK $SDK, deployment target $TARGET, simulatore $DEVICE_ID"
+
+      - name: Compila
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project Aurea.xcodeproj \
+            -scheme Aurea \
+            -destination "id=${{ steps.env.outputs.device }}" \
+            IPHONEOS_DEPLOYMENT_TARGET=${{ steps.env.outputs.target }} \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee build.log | grep -E "error:|warning:|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" build.log
+
+      - name: Unit test
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project Aurea.xcodeproj \
+            -scheme Aurea \
+            -destination "id=${{ steps.env.outputs.device }}" \
+            -only-testing:AureaTests \
+            IPHONEOS_DEPLOYMENT_TARGET=${{ steps.env.outputs.target }} \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee test.log | grep -E "error:|Test Case .* (passed|failed)|✔|✘|TEST (SUCCEEDED|FAILED)|Suite .* (passed|failed)" || true
+          grep -q "TEST SUCCEEDED" test.log
+
+      - name: Log completi
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-logs
+          path: "*.log"
+          if-no-files-found: ignore
