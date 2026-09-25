@@ -10,9 +10,10 @@ struct TransactionDetailView: View {
 
     @State private var showingDeleteConfirmation = false
     @State private var showingEdit = false
+    @State private var showingRepeat = false
 
     private var isTransfer: Bool {
-        transaction.category == "Trasferimento"
+        transaction.isTransfer
     }
 
     var body: some View {
@@ -50,6 +51,9 @@ struct TransactionDetailView: View {
                         Button { showingEdit = true } label: {
                             Label("Modifica movimento", systemImage: "pencil")
                         }
+                        Button { showingRepeat = true } label: {
+                            Label("Registra di nuovo", systemImage: "arrow.clockwise")
+                        }
                     }
 
                     Section {
@@ -67,6 +71,9 @@ struct TransactionDetailView: View {
             .sheet(isPresented: $showingEdit) {
                 EditTransactionView(transaction: transaction)
             }
+            .sheet(isPresented: $showingRepeat) {
+                QuickAddView(prefill: QuickAddPrefill(repeating: transaction))
+            }
             .confirmationDialog(isTransfer ? "Eliminare l’intero trasferimento?" : "Eliminare questo movimento?", isPresented: $showingDeleteConfirmation, titleVisibility: .visible) {
                 Button("Elimina", role: .destructive) { deleteMovement() }
                 Button("Annulla", role: .cancel) { }
@@ -75,13 +82,7 @@ struct TransactionDetailView: View {
     }
 
     private func deleteMovement() {
-        if isTransfer, let groupID = transaction.transferGroupID {
-            for item in allTransactions where item.transferGroupID == groupID {
-                modelContext.delete(item)
-            }
-        } else {
-            modelContext.delete(transaction)
-        }
+        Transaction.delete(transaction, from: allTransactions, in: modelContext)
         dismiss()
     }
 
@@ -107,6 +108,7 @@ struct TransactionDetailView: View {
 
 private struct EditTransactionView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @Query private var wallets: [Wallet]
 
     let transaction: Transaction
@@ -135,6 +137,7 @@ private struct EditTransactionView: View {
     private var canSave: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         !category.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !Transaction.isReservedCategory(category) &&
         (parsedAmount ?? 0) > 0 &&
         selectedWallet != nil
     }
@@ -180,7 +183,7 @@ private struct EditTransactionView: View {
         guard let parsedAmount, let selectedWallet else { return }
         transaction.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         transaction.amount = parsedAmount
-        transaction.category = category.trimmingCharacters(in: .whitespacesAndNewlines)
+        transaction.category = CategoryService.resolve(category, type: type, in: modelContext)
         transaction.type = type
         transaction.wallet = selectedWallet
         transaction.date = date

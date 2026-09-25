@@ -1,7 +1,10 @@
 import Testing
 import Foundation
+import SwiftData
 @testable import Aurea
 
+// Il target dell'app isola i tipi su MainActor per impostazione predefinita: la suite gira lì.
+@MainActor
 struct AureaTests {
 
     @Test func walletBalanceHandlesIncomeAndExpenses() {
@@ -33,6 +36,473 @@ struct AureaTests {
         #expect(FinancialEngine.totalIncome(from: items) == 100)
         #expect(FinancialEngine.totalExpenses(from: items) == 30)
         #expect(FinancialEngine.cashFlow(from: items) == 70)
+    }
+
+    @Test func transfersAreRecognizedByGroupIDAndLegacyCategory() {
+        let linked = Transaction(type: .expense, amount: 50, category: "Casa", title: "Giroconto", transferGroupID: UUID())
+        let legacy = Transaction(type: .expense, amount: 50, category: Transaction.transferCategory, title: "Vecchio trasferimento")
+        let normal = Transaction(type: .expense, amount: 50, category: "Casa", title: "Affitto")
+
+        #expect(linked.isTransfer)
+        #expect(legacy.isTransfer)
+        #expect(!normal.isTransfer)
+        #expect(FinancialEngine.totalExpenses(from: [linked, legacy, normal]) == 50)
+    }
+
+    @Test func transferCategoryIsReserved() {
+        #expect(Transaction.isReservedCategory("Trasferimento"))
+        #expect(Transaction.isReservedCategory(" trasferimento "))
+        #expect(!Transaction.isReservedCategory("Trasporti"))
+    }
+
+    @Test func totalsConvertForeignCurrencies() {
+        let usd = Wallet(name: "USD", icon: "dollarsign.circle", currencyCode: "USD", exchangeRateToEUR: 0.9)
+        let eur = Wallet(name: "EUR", icon: "wallet.pass")
+        let items = [
+            Transaction(type: .expense, amount: 100, category: "Viaggi", title: "Hotel", wallet: usd),
+            Transaction(type: .expense, amount: 10, category: "Cibo", title: "Pranzo", wallet: eur)
+        ]
+
+        #expect(FinancialEngine.totalExpenses(from: items) == 100)
+    }
+
+    @MainActor
+    @Test func recurringEngineCatchesUpMissedOccurrences() throws {
+        let container = try ModelContainer(
+            for: Wallet.self, Transaction.self, RecurringTransaction.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = container.mainContext
+        let calendar = Calendar.current
+        let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 25, hour: 12))!
+        let start = calendar.date(from: DateComponents(year: 2026, month: 7, day: 1, hour: 9))!
+
+        let wallet = Wallet(name: "Conto", icon: "wallet.pass")
+        let rent = RecurringTransaction(title: "Affitto", amount: 500, category: "Casa", type: .expense, frequency: .monthly, nextDate: start, wallet: wallet)
+        let paused = RecurringTransaction(title: "Palestra", amount: 40, category: "Sport", type: .expense, frequency: .monthly, nextDate: start, wallet: wallet, isActive: false)
+        context.insert(wallet)
+        context.insert(rent)
+        context.insert(paused)
+
+        let created = RecurringEngine.generateDueTransactions(from: [rent, paused], in: context, now: now)
+
+        #expect(created.count == 3) // 1 luglio, 1 agosto, 1 settembre
+        #expect(created.allSatisfy { $0.title == "Affitto" })
+        #expect(calendar.component(.month, from: rent.nextDate) == 10)
+        #expect(paused.nextDate == start)
+
+        let again = RecurringEngine.generateDueTransactions(from: [rent, paused], in: context, now: now)
+        #expect(again.isEmpty)
+    }
+
+    @MainActor
+    private func makeCategoryContainer() throws -> ModelContainer {
+        try ModelContainer(
+            for: Wallet.self, Transaction.self, RecurringTransaction.self, Budget.self, FinanceCategory.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+    }
+
+    @MainActor
+    @Test func synchronizeRegistersTypedCategoriesAndUnifiesCase() throws {
+        let container = try makeCategoryContainer()
+        let context = container.mainContext
+        let cibo = FinanceCategory(name: "Cibo", type: .expense)
+        context.insert(cibo)
+        let lower = Transaction(type: .expense, amount: 10, category: "cibo ", title: "Pizza")
+        let custom = Transaction(type: .expense, amount: 20, category: "Palestra", title: "Abbonamento")
+        let transferHalf = Transaction(type: .expense, amount: 30, category: Transaction.transferCategory, title: "Giroconto", transferGroupID: UUID())
+        [lower, custom, transferHalf].forEach { context.insert($0) }
+
+        CategoryService.synchronize(in: context)
+        CategoryService.synchronize(in: context) // idempotente
+        try context.save()
+
+        let expenseNames = try context.fetch(FetchDescriptor<FinanceCategory>()).filter { $0.type == .expense }.map(\.name)
+        #expect(lower.category == "Cibo")
+        #expect(expenseNames.filter { $0 == "Palestra" }.count == 1)
+        #expect(!expenseNames.contains(Transaction.transferCategory))
+        #expect(expenseNames.filter { $0.lowercased() == "cibo" }.count == 1)
+    }
+
+    @MainActor
+    @Test func synchronizeSeedsDefaultsOnlyWhenTypeIsEmpty() throws {
+        let container = try makeCategoryContainer()
+        let context = container.mainContext
+        context.insert(FinanceCategory(name: "Mia", type: .expense))
+
+        CategoryService.synchronize(in: context)
+        try context.save()
+
+        let categories = try context.fetch(FetchDescriptor<FinanceCategory>())
+        #expect(categories.filter { $0.type == .expense }.map(\.name) == ["Mia"])
+        #expect(categories.filter { $0.type == .income }.count == CategoryService.defaultIncomeCategories.count)
+    }
+
+    @MainActor
+    @Test func resolveReusesExistingCategoryAndRestoresArchived() throws {
+        let container = try makeCategoryContainer()
+        let context = container.mainContext
+        let archived = FinanceCategory(name: "Viaggi", type: .expense, isArchived: true)
+        context.insert(archived)
+
+        #expect(CategoryService.resolve("  viaggi", type: .expense, in: context) == "Viaggi")
+        #expect(!archived.isArchived)
+
+        #expect(CategoryService.resolve("Libri", type: .expense, in: context) == "Libri")
+        try context.save()
+        let names = try context.fetch(FetchDescriptor<FinanceCategory>()).map(\.name)
+        #expect(names.contains("Libri"))
+    }
+
+    @MainActor
+    @Test func renamePropagatesToTransactionsRecurringAndBudgets() throws {
+        let container = try makeCategoryContainer()
+        let context = container.mainContext
+        let category = FinanceCategory(name: "Cibo", type: .expense)
+        let expense = Transaction(type: .expense, amount: 10, category: "Cibo", title: "Pizza")
+        let incomeSameName = Transaction(type: .income, amount: 5, category: "Cibo", title: "Rimborso cena")
+        let recurring = RecurringTransaction(title: "Spesa", amount: 50, category: "Cibo", type: .expense, frequency: .weekly, nextDate: .now)
+        let budget = Budget(title: "Mangiare", category: "Cibo", monthlyLimit: 300)
+        context.insert(category)
+        [expense, incomeSameName].forEach { context.insert($0) }
+        context.insert(recurring)
+        context.insert(budget)
+
+        try CategoryService.rename(category, to: "Alimentari", in: context)
+
+        #expect(category.name == "Alimentari")
+        #expect(expense.category == "Alimentari")
+        #expect(incomeSameName.category == "Cibo")
+        #expect(recurring.category == "Alimentari")
+        #expect(budget.category == "Alimentari")
+    }
+
+    @MainActor
+    @Test func renameToExistingNameMergesCategories() throws {
+        let container = try makeCategoryContainer()
+        let context = container.mainContext
+        let source = FinanceCategory(name: "Supermercato", type: .expense)
+        let target = FinanceCategory(name: "Alimentari", type: .expense)
+        let expense = Transaction(type: .expense, amount: 40, category: "Supermercato", title: "Spesa")
+        context.insert(source)
+        context.insert(target)
+        context.insert(expense)
+
+        try CategoryService.rename(source, to: "alimentari", in: context)
+
+        #expect(expense.category == "Alimentari")
+        try context.save()
+        let names = try context.fetch(FetchDescriptor<FinanceCategory>()).map(\.name)
+        #expect(names == ["Alimentari"])
+    }
+
+    @Test func periodFilterRespectsMonthBoundaries() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 25, hour: 12))!
+        let lastDayOfAugust = calendar.date(from: DateComponents(year: 2026, month: 8, day: 31, hour: 23, minute: 59))!
+        let firstOfSeptember = calendar.date(from: DateComponents(year: 2026, month: 9, day: 1))!
+        let july = calendar.date(from: DateComponents(year: 2026, month: 7, day: 10))!
+        let items = [
+            Transaction(type: .expense, amount: 1, date: lastDayOfAugust, category: "Casa", title: "Agosto"),
+            Transaction(type: .expense, amount: 1, date: firstOfSeptember, category: "Casa", title: "Settembre"),
+            Transaction(type: .expense, amount: 1, date: july, category: "Casa", title: "Luglio"),
+        ]
+
+        let lastMonth = TransactionFilter(period: .lastMonth).apply(to: items, now: now, calendar: calendar)
+        let thisMonth = TransactionFilter(period: .thisMonth).apply(to: items, now: now, calendar: calendar)
+        let threeMonths = TransactionFilter(period: .lastThreeMonths).apply(to: items, now: now, calendar: calendar)
+
+        #expect(lastMonth.map(\.title) == ["Agosto"])
+        #expect(thisMonth.map(\.title) == ["Settembre"])
+        #expect(threeMonths.count == 3)
+    }
+
+    @Test func kindAndCategoryFiltersExcludeTransfers() {
+        let items = [
+            Transaction(type: .expense, amount: 10, category: "Cibo", title: "Pizza"),
+            Transaction(type: .income, amount: 100, category: "Stipendio", title: "Settembre"),
+            Transaction(type: .expense, amount: 50, category: Transaction.transferCategory, title: "Giroconto", transferGroupID: UUID()),
+        ]
+
+        #expect(TransactionFilter(kind: .expenses).apply(to: items).map(\.title) == ["Pizza"])
+        #expect(TransactionFilter(kind: .income).apply(to: items).map(\.title) == ["Settembre"])
+        #expect(TransactionFilter(category: "cibo").apply(to: items).map(\.title) == ["Pizza"])
+        #expect(TransactionFilter(searchText: "  pizz ").apply(to: items).map(\.title) == ["Pizza"])
+        #expect(TransactionFilter().apply(to: items).count == 3)
+    }
+
+    @MainActor
+    @Test func deletingTransferRemovesBothHalves() throws {
+        let container = try ModelContainer(for: Wallet.self, Transaction.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let context = container.mainContext
+        let groupID = UUID()
+        let outgoing = Transaction(type: .expense, amount: 50, category: Transaction.transferCategory, title: "→ Risparmi", transferGroupID: groupID)
+        let incoming = Transaction(type: .income, amount: 50, category: Transaction.transferCategory, title: "← Conto", transferGroupID: groupID)
+        let other = Transaction(type: .expense, amount: 5, category: "Cibo", title: "Caffè")
+        [outgoing, incoming, other].forEach { context.insert($0) }
+        try context.save()
+
+        Transaction.delete(incoming, from: [outgoing, incoming, other], in: context)
+        try context.save()
+
+        let remaining = try context.fetch(FetchDescriptor<Transaction>()).map(\.title)
+        #expect(remaining == ["Caffè"])
+    }
+
+    @Test func legacyTransferWithoutGroupCannotBeDeletedFromList() {
+        let legacy = Transaction(type: .expense, amount: 50, category: Transaction.transferCategory, title: "Vecchio")
+        let normal = Transaction(type: .expense, amount: 5, category: "Cibo", title: "Caffè")
+        #expect(!legacy.canBeDeleted)
+        #expect(normal.canBeDeleted)
+    }
+
+    @Test func csvUsesItalianSpreadsheetFormat() {
+        let rome = TimeZone(identifier: "Europe/Rome")!
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = rome
+        let date = calendar.date(from: DateComponents(year: 2026, month: 9, day: 5, hour: 8, minute: 30))!
+        let usd = Wallet(name: "Carta USD", icon: "creditcard", currencyCode: "USD", exchangeRateToEUR: 0.9)
+        let eur = Wallet(name: "Conto", icon: "wallet.pass")
+        let items = [
+            Transaction(type: .expense, amount: Decimal(string: "12.5")!, date: date, category: "Cibo", title: "Pizza; birra", wallet: eur),
+            Transaction(type: .income, amount: Decimal(string: "10.01")!, date: date.addingTimeInterval(60), category: "Rimborso", title: "Rimborso \"cena\"", wallet: usd),
+            Transaction(type: .expense, amount: 50, date: date.addingTimeInterval(120), category: Transaction.transferCategory, title: "Giroconto", wallet: eur, transferGroupID: UUID()),
+        ]
+
+        let csv = CSVExporter.csv(for: items, timeZone: rome)
+        let lines = csv.dropFirst().components(separatedBy: "\r\n").filter { !$0.isEmpty }
+
+        #expect(csv.hasPrefix("\u{FEFF}"))
+        #expect(lines[0] == "Data;Ora;Tipo;Titolo;Categoria;Importo;Valuta;Importo EUR;Portafoglio")
+        #expect(lines[1] == "05/09/2026;08:30;Spesa;\"Pizza; birra\";Cibo;-12,5;EUR;-12,5;Conto")
+        #expect(lines[2] == "05/09/2026;08:31;Entrata;\"Rimborso \"\"cena\"\"\";Rimborso;10,01;USD;9,01;Carta USD")
+        #expect(lines[3].hasPrefix("05/09/2026;08:32;Trasferimento;Giroconto;"))
+    }
+
+    @Test func csvNumberFormatting() {
+        #expect(CSVExporter.number(Decimal(string: "1234.5")!) == "1234,5")
+        #expect(CSVExporter.number(Decimal(string: "9.009")!, scale: 2) == "9,01")
+        #expect(CSVExporter.number(-3) == "-3")
+        #expect(CSVExporter.escape("semplice") == "semplice")
+        #expect(CSVExporter.escape("a\nb") == "\"a\nb\"")
+    }
+
+    @Test func siriAmountIsRoundedToCents() {
+        #expect(IntentAmount.decimal(from: 12.3) == Decimal(string: "12.3")!)
+        #expect(IntentAmount.decimal(from: 0.1) == Decimal(string: "0.1")!)
+        #expect(IntentAmount.decimal(from: 9.999) == 10)
+    }
+
+    @MainActor
+    @Test func siriWalletMatchesByNameOrFallsBackToFirst() {
+        let main = Wallet(name: "Conto", icon: "wallet.pass")
+        let card = Wallet(name: "Carta", icon: "creditcard")
+        #expect(IntentAmount.wallet(named: nil, in: [main, card]) === main)
+        #expect(IntentAmount.wallet(named: " carta ", in: [main, card]) === card)
+        #expect(IntentAmount.wallet(named: "Inesistente", in: [main, card]) == nil)
+    }
+
+    @Test func widgetSnapshotSummarizesCurrentMonth() {
+        let calendar = Calendar.current
+        let now = Date.now
+        let lastMonth = calendar.date(byAdding: .month, value: -1, to: now)!
+        let wallet = Wallet(name: "Conto", icon: "wallet.pass")
+        let items = [
+            Transaction(type: .expense, amount: 30, date: now, category: "Cibo", title: "Oggi", wallet: wallet),
+            Transaction(type: .income, amount: 1000, date: now, category: "Stipendio", title: "Stipendio", wallet: wallet),
+            Transaction(type: .expense, amount: 999, date: lastMonth, category: "Cibo", title: "Mese scorso", wallet: wallet),
+            Transaction(type: .expense, amount: 200, date: now, category: Transaction.transferCategory, title: "Giroconto", wallet: wallet, transferGroupID: UUID()),
+        ]
+        let budgets = [
+            Budget(title: "Cibo", category: "Cibo", monthlyLimit: 40),
+            Budget(title: "Totale", monthlyLimit: 1000),
+            Budget(title: "Archiviato", monthlyLimit: 10, isArchived: true),
+        ]
+
+        let snapshot = WidgetSnapshotBuilder.make(transactions: items, budgets: budgets, now: now, calendar: calendar)
+
+        #expect(snapshot.monthExpenses == 30)
+        #expect(snapshot.monthIncome == 1000)
+        #expect(snapshot.expensesToday(at: now, calendar: calendar) == 30)
+        #expect(snapshot.budgets.map(\.title) == ["Cibo", "Totale"])
+        #expect(snapshot.isCurrentMonth(at: now, calendar: calendar))
+        #expect(!snapshot.isCurrentMonth(at: calendar.date(byAdding: .month, value: 1, to: now)!, calendar: calendar))
+        #expect(snapshot.expensesToday(at: calendar.date(byAdding: .day, value: 1, to: now)!, calendar: calendar) == 0)
+    }
+
+    @Test func insightsFlagBudgetsOverAndNearLimit() {
+        let now = Date.now
+        let items = [
+            Transaction(type: .expense, amount: 120, date: now, category: "Svago", title: "Concerto"),
+            Transaction(type: .expense, amount: 85, date: now, category: "Cibo", title: "Spesa"),
+        ]
+        let over = Budget(title: "Svago", category: "Svago", monthlyLimit: 100)
+        let near = Budget(title: "Cibo", category: "Cibo", monthlyLimit: 100)
+        let fine = Budget(title: "Casa", category: "Casa", monthlyLimit: 500)
+
+        let insights = InsightsEngine.budgetInsights([fine, near, over], transactions: items, now: now, calendar: .current)
+
+        #expect(insights.map(\.kind) == [.warning, .alert])
+        #expect(insights.map(\.title) == ["Budget Cibo: 85% usato", "Budget Svago superato"])
+    }
+
+    @Test func insightsComparePaceWithSamePeriodOfLastMonth() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 10, hour: 12))!
+        let items = [
+            // Stesso periodo del mese scorso (1–10 agosto): 100 €. Dopo il 10 agosto non conta.
+            Transaction(type: .expense, amount: 100, date: calendar.date(from: DateComponents(year: 2026, month: 8, day: 5))!, category: "Svago", title: "Agosto"),
+            Transaction(type: .expense, amount: 900, date: calendar.date(from: DateComponents(year: 2026, month: 8, day: 25))!, category: "Casa", title: "Fine agosto"),
+            // Questo mese: 150 €, tutto in Svago.
+            Transaction(type: .expense, amount: 150, date: calendar.date(from: DateComponents(year: 2026, month: 9, day: 3))!, category: "Svago", title: "Settembre"),
+        ]
+
+        let insights = InsightsEngine.paceInsights(items, now: now, calendar: calendar)
+
+        let pace = insights.first { $0.id == "pace" }
+        #expect(pace?.kind == .warning)
+        #expect(pace?.detail.contains("50%") == true)
+        let saving = insights.first { $0.id == "saving" }
+        #expect(saving?.title == "Dove risparmiare: Svago")
+    }
+
+    @Test func insightsReportOverdueDebtsAndUpcomingRecurring() {
+        let calendar = Calendar.current
+        let now = Date.now
+        let overdue = Relationship(personName: "Luca", amount: 50, type: .debt, dueDate: calendar.date(byAdding: .day, value: -3, to: now))
+        let closed = Relationship(personName: "Anna", amount: 20, type: .credit, isClosed: true)
+        let rent = RecurringTransaction(title: "Affitto", amount: 500, category: "Casa", type: .expense, frequency: .monthly, nextDate: calendar.date(byAdding: .day, value: 2, to: now)!)
+        let later = RecurringTransaction(title: "Assicurazione", amount: 300, category: "Casa", type: .expense, frequency: .yearly, nextDate: calendar.date(byAdding: .day, value: 20, to: now)!)
+
+        let relationships = InsightsEngine.relationshipInsights([overdue, closed], now: now, calendar: calendar)
+        let recurring = InsightsEngine.recurringInsights([rent, later], now: now, calendar: calendar)
+
+        #expect(relationships.first?.kind == .alert)
+        #expect(relationships.first?.title == "Debito scaduto con Luca")
+        #expect(recurring.count == 1)
+        #expect(recurring.first?.title == "1 pagamento ricorrente in settimana")
+    }
+
+    @Test func insightsAreSortedBySeverityAndNeverEmpty() {
+        let empty = InsightsEngine.insights(from: .init(transactions: []))
+        #expect(empty.map(\.id) == ["all-good"])
+
+        let now = Date.now
+        let input = InsightsEngine.Input(
+            transactions: [Transaction(type: .expense, amount: 200, date: now, category: "Svago", title: "Concerto")],
+            budgets: [Budget(title: "Svago", category: "Svago", monthlyLimit: 100)],
+            relationships: [Relationship(personName: "Luca", amount: 10, type: .credit)]
+        )
+        let kinds = InsightsEngine.insights(from: input, now: now).map(\.kind)
+        #expect(kinds == kinds.sorted())
+        #expect(kinds.first == .alert)
+    }
+
+    @Test func receiptParserReadsTypicalItalianReceipt() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 25, hour: 18))!
+        let lines = [
+            "DOCUMENTO COMMERCIALE",
+            "di vendita o prestazione",
+            "SUPERMERCATO ROSSI SRL",
+            "Via Roma 12 - Bologna",
+            "P.IVA 01234567890",
+            "PANE INTEGRALE 2,40",
+            "LATTE 1,29",
+            "SUBTOTALE 13,69",
+            "SCONTO -1,19",
+            "TOTALE COMPLESSIVO 12,50",
+            "DI CUI IVA 1,14",
+            "PAGAMENTO CONTANTE 20,00",
+            "RESTO 7,50",
+            "24-09-2026 18:42 DOC.N. 0042-0017",
+        ]
+
+        let result = ReceiptParser.parse(lines, now: now, calendar: calendar)
+
+        #expect(result.amount == Decimal(string: "12.50")!)
+        #expect(result.merchant == "Supermercato Rossi Srl")
+        #expect(result.date.map { calendar.dateComponents([.year, .month, .day], from: $0) } == DateComponents(year: 2026, month: 9, day: 24))
+    }
+
+    @Test func receiptParserHandlesSplitLabelAndFallbacks() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 25))!
+
+        // L'OCR separa l'etichetta dall'importo.
+        #expect(ReceiptParser.parse(["BAR CENTRALE", "TOTALE", "€ 4.80"], now: now, calendar: calendar).amount == Decimal(string: "4.80")!)
+        // Nessuna etichetta: l'importo più alto, ignorando contanti e resto.
+        #expect(ReceiptParser.total(in: ["Caffè 1,20", "Brioche 1,50", "3,70", "CONTANTI 10,00"]) == Decimal(string: "3.70")!)
+        // Migliaia con il punto.
+        #expect(ReceiptParser.amounts(in: "TOTALE 1.234,56") == [Decimal(string: "1234.56")!])
+        // Una data con i punti non è un importo.
+        #expect(ReceiptParser.amounts(in: "25.09.2026 18:42").isEmpty)
+    }
+
+    @Test func receiptParserRejectsImpossibleOrFutureDates() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 25))!
+
+        #expect(ReceiptParser.date(in: ["31/02/2026"], now: now, calendar: calendar) == nil)
+        #expect(ReceiptParser.date(in: ["10/12/2026"], now: now, calendar: calendar) == nil)
+        let short = ReceiptParser.date(in: ["Data 03/09/26"], now: now, calendar: calendar)
+        #expect(short.map { calendar.component(.year, from: $0) } == 2026)
+    }
+
+    @Test func dailyReminderSkipsTodayWhenAlreadyLogged() {
+        let calendar = Calendar(identifier: .gregorian)
+        let morning = calendar.date(from: DateComponents(year: 2026, month: 9, day: 25, hour: 10))!
+
+        let notLogged = AppNotificationManager.dailyReminderDates(now: morning, minutesAfterMidnight: 21 * 60, loggedToday: false, days: 3, calendar: calendar)
+        let logged = AppNotificationManager.dailyReminderDates(now: morning, minutesAfterMidnight: 21 * 60, loggedToday: true, days: 3, calendar: calendar)
+
+        #expect(notLogged.map { calendar.component(.day, from: $0) } == [25, 26, 27])
+        #expect(notLogged.allSatisfy { calendar.component(.hour, from: $0) == 21 })
+        #expect(logged.map { calendar.component(.day, from: $0) } == [26, 27])
+    }
+
+    @Test func dailyReminderSkipsTimesAlreadyPassed() {
+        let calendar = Calendar(identifier: .gregorian)
+        let evening = calendar.date(from: DateComponents(year: 2026, month: 9, day: 25, hour: 22))!
+
+        let dates = AppNotificationManager.dailyReminderDates(now: evening, minutesAfterMidnight: 20 * 60 + 30, loggedToday: false, days: 2, calendar: calendar)
+
+        #expect(dates.count == 1)
+        #expect(dates.first.map { calendar.dateComponents([.day, .hour, .minute], from: $0) } == DateComponents(day: 26, hour: 20, minute: 30))
+    }
+
+    @Test func repeatPrefillCopiesMovementButNotCategoryAsTitle() {
+        let wallet = Wallet(name: "Carta", icon: "creditcard")
+        let described = Transaction(type: .expense, amount: Decimal(string: "1.30")!, category: "Bar", title: "Caffè", wallet: wallet)
+        let undescribed = Transaction(type: .expense, amount: 50, category: "Benzina", title: "Benzina", wallet: wallet)
+
+        let first = QuickAddPrefill(repeating: described)
+        let second = QuickAddPrefill(repeating: undescribed)
+
+        #expect(first.amount == Decimal(string: "1.30")!)
+        #expect(first.category == "Bar")
+        #expect(first.title == "Caffè")
+        #expect(first.wallet === wallet)
+        // Il titolo uguale alla categoria era un segnaposto: non diventa una descrizione.
+        #expect(second.title.isEmpty)
+    }
+
+    @Test func dailyAllowanceSplitsRemainingBudgetOverDaysLeft() {
+        let calendar = Calendar(identifier: .gregorian)
+        let sept25 = calendar.date(from: DateComponents(year: 2026, month: 9, day: 25, hour: 12))!
+        let sept30 = calendar.date(from: DateComponents(year: 2026, month: 9, day: 30, hour: 12))!
+        let sept28 = calendar.date(from: DateComponents(year: 2026, month: 9, day: 28, hour: 12))!
+
+        // 25–30 settembre: 6 giorni, oggi compreso.
+        #expect(FinancialEngine.dailyAllowance(limit: 300, spent: 180, now: sept25, calendar: calendar) == 20)
+        // Ultimo giorno del mese: tutto il residuo.
+        #expect(FinancialEngine.dailyAllowance(limit: 300, spent: 180, now: sept30, calendar: calendar) == 120)
+        // Arrotondato per difetto: 100 € su 3 giorni sono 33,33 €, non 33,34 €.
+        #expect(FinancialEngine.dailyAllowance(limit: 100, spent: 0, now: sept28, calendar: calendar) == Decimal(string: "33.33")!)
+        // Budget esaurito o superato.
+        #expect(FinancialEngine.dailyAllowance(limit: 100, spent: 100, now: sept25, calendar: calendar) == 0)
+        #expect(FinancialEngine.dailyAllowance(limit: 100, spent: 150, now: sept25, calendar: calendar) == 0)
     }
 
     @Test func relationshipRemainingAmountNeverBecomesNegative() {

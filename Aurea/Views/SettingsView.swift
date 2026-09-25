@@ -17,6 +17,8 @@ struct SettingsView: View {
     @AppStorage("aurea.notifications.relationships") private var relationshipNotifications = true
     @AppStorage("aurea.notifications.recurring") private var recurringNotifications = true
     @AppStorage("aurea.notifications.budgets") private var budgetNotifications = true
+    @AppStorage("aurea.notifications.dailyReminder") private var dailyReminder = false
+    @AppStorage("aurea.notifications.dailyReminderMinutes") private var dailyReminderMinutes = 21 * 60
     @AppStorage("aurea.agenda.showCompleted") private var showCompletedAgenda = true
     @AppStorage("aurea.agenda.defaultReminder") private var defaultReminder = 0
     @AppStorage("aurea.appearance") private var appearanceRaw = AppAppearance.system.rawValue
@@ -24,7 +26,8 @@ struct SettingsView: View {
     @State private var showingFinance = false
     @State private var showingAgenda = false
     @State private var showingQuickAdd = false
-    @State private var showingInsights = false
+    @State private var showingReports = false
+    private let appLock = AppLock.shared
     @State private var showingOnboarding = false
     @State private var showingImporter = false
     @State private var showingRestoreConfirmation = false
@@ -46,7 +49,7 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section("Analisi") {
-                    navigationButton("Panoramica completa", icon: "rectangle.3.group") { showingInsights = true }
+                    navigationButton("Report", icon: "chart.bar.xaxis") { showingReports = true }
                     Button { runDiagnostics() } label: { Label("Verifica integrità dati", systemImage: "checkmark.shield") }
                 }
 
@@ -57,14 +60,29 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Toggle("Blocca con \(appLock.methodName)", isOn: Binding(
+                        get: { appLock.isEnabled },
+                        set: { newValue in Task { await appLock.setEnabled(newValue) } }
+                    ))
+                    if let error = appLock.lastError {
+                        Text(error).font(.caption).foregroundStyle(.red)
+                    }
+                } header: { Text("Privacy") }
+                footer: { Text("Aurea si blocca quando esci dall'app e resta coperta nel selettore delle app. Se \(appLock.methodName) non riesce puoi usare il codice del dispositivo.") }
+
+                Section {
                     Toggle("Debiti e crediti", isOn: $relationshipNotifications)
                     Toggle("Movimenti ricorrenti", isOn: $recurringNotifications)
                     Toggle("Avvisi budget", isOn: $budgetNotifications)
+                    Toggle("Promemoria giornaliero", isOn: $dailyReminder)
+                    if dailyReminder {
+                        DatePicker("Orario", selection: dailyReminderTime, displayedComponents: .hourAndMinute)
+                    }
                     Button { refreshReminders(); statusMessage = "Promemoria aggiornati." } label: {
                         Label("Aggiorna promemoria", systemImage: "bell.badge")
                     }
                 } header: { Text("Notifiche") }
-                footer: { Text("Le scadenze di debiti/crediti e ricorrenti vengono ricordate il giorno prima. I budget avvisano all'80% e quando vengono superati.") }
+                footer: { Text("Le scadenze di debiti/crediti e ricorrenti vengono ricordate il giorno prima. I budget avvisano all'80% e quando vengono superati. Il promemoria giornaliero ti chiede se hai registrato le spese e salta i giorni in cui l'hai già fatto.") }
 
                 Section {
                     Picker("Aspetto", selection: appearanceBinding) {
@@ -94,7 +112,7 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Button { exportText(makeCSV(), filename: "Aurea-Movimenti.csv") } label: {
+                    Button { exportCSV() } label: {
                         Label("Esporta movimenti CSV", systemImage: "tablecells")
                     }
                     Button { createFullBackup() } label: {
@@ -127,7 +145,7 @@ struct SettingsView: View {
             .navigationTitle("Impostazioni")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fine") { dismiss() } } }
-            .sheet(isPresented: $showingInsights) { AureaInsightsView() }
+            .sheet(isPresented: $showingReports) { NavigationStack { ReportsView(showsDoneButton: true) } }
             .sheet(isPresented: $showingFinance) { FinanceCenterView() }
             .sheet(isPresented: $showingAgenda) { AgendaView() }
             .sheet(isPresented: $showingQuickAdd) { GlobalQuickAddView() }
@@ -144,6 +162,8 @@ struct SettingsView: View {
             .onChange(of: relationshipNotifications) { _, _ in refreshReminders() }
             .onChange(of: recurringNotifications) { _, _ in refreshReminders() }
             .onChange(of: budgetNotifications) { _, _ in refreshReminders() }
+            .onChange(of: dailyReminder) { _, _ in refreshReminders() }
+            .onChange(of: dailyReminderMinutes) { _, _ in refreshReminders() }
         }
     }
 
@@ -152,6 +172,19 @@ struct SettingsView: View {
 
     private func navigationButton(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) { HStack { Label(title, systemImage: icon); Spacer(); Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary) } }
+    }
+
+    /// L'orario è salvato come minuti dalla mezzanotte; il DatePicker lavora con una Date di oggi.
+    private var dailyReminderTime: Binding<Date> {
+        Binding(
+            get: {
+                Calendar.current.date(bySettingHour: dailyReminderMinutes / 60, minute: dailyReminderMinutes % 60, second: 0, of: .now) ?? .now
+            },
+            set: { date in
+                let components = Calendar.current.dateComponents([.hour, .minute], from: date)
+                dailyReminderMinutes = (components.hour ?? 21) * 60 + (components.minute ?? 0)
+            }
+        )
     }
 
     private func refreshReminders() {
@@ -165,6 +198,11 @@ struct SettingsView: View {
     private func exportText(_ text: String, filename: String) {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
         do { try text.write(to: url, atomically: true, encoding: .utf8); exportItem = ExportItem(url: url) }
+        catch { statusMessage = "Esportazione non riuscita: \(error.localizedDescription)" }
+    }
+
+    private func exportCSV() {
+        do { exportItem = ExportItem(url: try CSVExporter.writeFile(for: transactions)) }
         catch { statusMessage = "Esportazione non riuscita: \(error.localizedDescription)" }
     }
 
@@ -207,26 +245,6 @@ struct SettingsView: View {
         if invalidRelationships > 0 { issues.append("\(invalidRelationships) debiti/crediti con importo non valido") }
         statusMessage = issues.isEmpty ? "Controllo completato: non risultano problemi evidenti nei dati." : "Da controllare: " + issues.joined(separator: "; ") + "."
     }
-
-    private func makeCSV() -> String {
-        var rows = ["Data,Tipo,Titolo,Categoria,Importo,Valuta,Portafoglio"]
-        let formatter = ISO8601DateFormatter()
-        for transaction in transactions.sorted(by: { $0.date < $1.date }) {
-            let type: String
-            switch transaction.type { case .expense: type = "Spesa"; case .income: type = "Entrata"; case .transfer: type = "Trasferimento" }
-            let values = [formatter.string(from: transaction.date), type, transaction.title, transaction.category, NSDecimalNumber(decimal: transaction.amount).stringValue, transaction.wallet?.currencyCode ?? "EUR", transaction.wallet?.name ?? ""].map(csvEscape)
-            rows.append(values.joined(separator: ","))
-        }
-        return rows.joined(separator: "\n")
-    }
-
-    private func csvEscape(_ value: String) -> String { "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\"" }
 }
 
-private struct ExportItem: Identifiable { let id = UUID(); let url: URL }
 
-private struct ActivityView: UIViewControllerRepresentable {
-    let activityItems: [Any]
-    func makeUIViewController(context: Context) -> UIActivityViewController { UIActivityViewController(activityItems: activityItems, applicationActivities: nil) }
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-}

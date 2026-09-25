@@ -23,9 +23,9 @@ struct FinanceCenterView: View {
 
                 Section("Analisi") {
                     NavigationLink {
-                        FinanceStatisticsView()
+                        ReportsView()
                     } label: {
-                        Label("Statistiche", systemImage: "chart.bar.xaxis")
+                        Label("Report", systemImage: "chart.bar.xaxis")
                     }
                 }
 
@@ -54,9 +54,12 @@ struct FinanceCenterView: View {
 }
 
 private struct CategoriesView: View {
-    @Environment(\.modelContext) private var modelContext
     @Query(sort: \FinanceCategory.name) private var categories: [FinanceCategory]
+    @Query private var transactions: [Transaction]
     @State private var showingAdd = false
+    @State private var editingCategory: FinanceCategory?
+
+    private var archived: [FinanceCategory] { categories.filter(\.isArchived) }
 
     var body: some View {
         List {
@@ -64,22 +67,34 @@ private struct CategoriesView: View {
                 Section(type == .expense ? "Spese" : "Entrate") {
                     let matching = categories.filter { $0.type == type && !$0.isArchived }
                     if matching.isEmpty {
-                        Text("Nessuna categoria personalizzata")
+                        Text("Nessuna categoria")
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(matching) { category in
-                            HStack {
-                                Label(category.name, systemImage: category.icon)
-                                Spacer()
-                                Button {
-                                    category.isArchived = true
-                                } label: {
-                                    Image(systemName: "archivebox")
+                            categoryRow(category)
+                                .swipeActions {
+                                    Button("Archivia") { category.isArchived = true }
+                                        .tint(.orange)
                                 }
-                                .buttonStyle(.plain)
-                            }
                         }
                     }
+                }
+            }
+
+            if !archived.isEmpty {
+                Section {
+                    ForEach(archived) { category in
+                        categoryRow(category)
+                            .opacity(0.6)
+                            .swipeActions {
+                                Button("Ripristina") { category.isArchived = false }
+                                    .tint(.green)
+                            }
+                    }
+                } header: {
+                    Text("Archiviate")
+                } footer: {
+                    Text("Le categorie archiviate non compaiono più tra i suggerimenti, ma i movimenti già registrati le mantengono.")
                 }
             }
         }
@@ -91,50 +106,140 @@ private struct CategoriesView: View {
                 Image(systemName: "plus")
             }
         }
-        .sheet(isPresented: $showingAdd) {
-            AddCategoryView()
+        .sheet(isPresented: $showingAdd) { CategoryEditorView(category: nil) }
+        .sheet(item: $editingCategory) { CategoryEditorView(category: $0) }
+    }
+
+    private func categoryRow(_ category: FinanceCategory) -> some View {
+        Button {
+            editingCategory = category
+        } label: {
+            HStack {
+                Label(category.name, systemImage: category.icon)
+                Spacer()
+                let count = CategoryService.usageCount(of: category, in: transactions)
+                if count > 0 {
+                    Text("\(count)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
     }
 }
 
-private struct AddCategoryView: View {
+/// Crea una categoria o, se `category` è valorizzata, la modifica.
+/// Rinominare aggiorna anche i movimenti, i ricorrenti e i budget che la usano.
+private struct CategoryEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @State private var name = ""
-    @State private var type: TransactionType = .expense
-    @State private var icon = "tag"
+    @Query private var categories: [FinanceCategory]
+    @Query private var transactions: [Transaction]
 
-    private let icons = ["tag", "fork.knife", "car", "house", "cart", "heart", "gamecontroller", "gift", "briefcase", "banknote"]
+    let category: FinanceCategory?
+
+    @State private var name: String
+    @State private var type: TransactionType
+    @State private var icon: String
+
+    private let icons = ["tag", "cart", "fork.knife", "car", "house", "bag", "heart", "gamecontroller", "gift", "briefcase", "banknote", "airplane", "graduationcap", "pawprint", "wrench.and.screwdriver", "arrow.uturn.backward"]
+
+    init(category: FinanceCategory?) {
+        self.category = category
+        _name = State(initialValue: category?.name ?? "")
+        _type = State(initialValue: category?.type ?? .expense)
+        _icon = State(initialValue: category?.icon ?? "tag")
+    }
+
+    private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    /// Un'altra categoria dello stesso tipo con questo nome.
+    private var duplicate: FinanceCategory? {
+        CategoryService.find(trimmedName, type: type, in: categories.filter { $0 !== category })
+    }
+
+    private var usageCount: Int {
+        category.map { CategoryService.usageCount(of: $0, in: transactions) } ?? 0
+    }
+
+    private var canSave: Bool {
+        guard !trimmedName.isEmpty, !Transaction.isReservedCategory(trimmedName) else { return false }
+        // In creazione un doppione non ha senso; in modifica diventa un'unione.
+        return category != nil || duplicate == nil
+    }
 
     var body: some View {
         NavigationStack {
             Form {
-                Picker("Tipo", selection: $type) {
-                    Text("Spesa").tag(TransactionType.expense)
-                    Text("Entrata").tag(TransactionType.income)
+                if category == nil {
+                    Picker("Tipo", selection: $type) {
+                        Text("Spesa").tag(TransactionType.expense)
+                        Text("Entrata").tag(TransactionType.income)
+                    }
+                    .pickerStyle(.segmented)
                 }
-                .pickerStyle(.segmented)
 
-                TextField("Nome", text: $name)
-
-                Picker("Icona", selection: $icon) {
-                    ForEach(icons, id: \.self) { value in
-                        Label(value, systemImage: value).tag(value)
+                Section {
+                    TextField("Nome", text: $name)
+                } footer: {
+                    if Transaction.isReservedCategory(trimmedName) {
+                        Text("“\(Transaction.transferCategory)” è riservata ai trasferimenti.")
+                            .foregroundStyle(.red)
+                    } else if let duplicate {
+                        Text(category == nil
+                             ? "Esiste già la categoria “\(duplicate.name)”."
+                             : "Salvando, questa categoria verrà unita a “\(duplicate.name)”.")
+                    } else if category != nil && usageCount > 0 {
+                        Text("Il nuovo nome verrà applicato anche a \(usageCount) \(usageCount == 1 ? "movimento" : "movimenti").")
                     }
                 }
+
+                Section("Icona") {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 12) {
+                        ForEach(icons, id: \.self) { value in
+                            Button {
+                                icon = value
+                            } label: {
+                                Image(systemName: value)
+                                    .frame(width: 40, height: 40)
+                                    .background(icon == value ? Color.accentColor.opacity(0.2) : Color.clear, in: Circle())
+                                    .foregroundStyle(icon == value ? Color.accentColor : Color.primary)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(value)
+                            .accessibilityAddTraits(icon == value ? .isSelected : [])
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
             }
-            .navigationTitle("Nuova categoria")
+            .navigationTitle(category == nil ? "Nuova categoria" : "Modifica categoria")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Annulla") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Salva") {
-                        modelContext.insert(FinanceCategory(name: name.trimmingCharacters(in: .whitespacesAndNewlines), type: type, icon: icon))
-                        dismiss()
-                    }
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button("Salva") { save() }
+                        .disabled(!canSave)
                 }
             }
         }
+    }
+
+    private func save() {
+        if let category {
+            category.icon = icon
+            if trimmedName != category.name {
+                try? CategoryService.rename(category, to: trimmedName, in: modelContext)
+            }
+        } else {
+            modelContext.insert(FinanceCategory(name: trimmedName, type: type, icon: icon))
+        }
+        dismiss()
     }
 }
 
@@ -170,11 +275,20 @@ private struct BudgetsView: View {
                     ProgressView(value: min(max(ratio, 0), 1))
                         .tint(ratio > 1 ? .red : nil)
 
-                    if ratio >= 0.8 {
-                        Text(ratio > 1 ? "Budget superato" : "Sei vicino al limite")
-                            .font(.caption)
-                            .foregroundStyle(ratio > 1 ? .red : .orange)
+                    HStack {
+                        if ratio >= 0.8 {
+                            Text(ratio > 1 ? "Budget superato" : "Sei vicino al limite")
+                                .foregroundStyle(ratio > 1 ? .red : .orange)
+                        }
+                        Spacer()
+                        if ratio < 1 {
+                            let remaining = budget.monthlyLimit - spent
+                            let perDay = FinancialEngine.dailyAllowance(limit: budget.monthlyLimit, spent: spent)
+                            Text("Restano \(remaining.formatted(.currency(code: "EUR"))) · \(perDay.formatted(.currency(code: "EUR")))/giorno")
+                                .foregroundStyle(.secondary)
+                        }
                     }
+                    .font(.caption)
                 }
                 .swipeActions {
                     Button("Archivia") { budget.isArchived = true }
@@ -229,60 +343,6 @@ private struct AddBudgetView: View {
     }
 }
 
-private struct FinanceStatisticsView: View {
-    @Query(sort: \Transaction.date, order: .reverse) private var transactions: [Transaction]
-
-    private var thisMonth: [Transaction] {
-        transactions.filter { Calendar.current.isDate($0.date, equalTo: .now, toGranularity: .month) }
-    }
-
-    private var lastMonth: [Transaction] {
-        guard let date = Calendar.current.date(byAdding: .month, value: -1, to: .now) else { return [] }
-        return transactions.filter { Calendar.current.isDate($0.date, equalTo: date, toGranularity: .month) }
-    }
-
-    private var categoryTotals: [(String, Decimal)] {
-        let expenses = thisMonth.filter { $0.type == .expense && $0.category != "Trasferimento" }
-        let grouped = Dictionary(grouping: expenses, by: \.category)
-        return grouped.map { ($0.key, $0.value.reduce(0) { $0 + $1.amount }) }.sorted { $0.1 > $1.1 }
-    }
-
-    var body: some View {
-        List {
-            Section("Questo mese") {
-                metric("Entrate", FinancialEngine.totalIncome(from: thisMonth))
-                metric("Spese", FinancialEngine.totalExpenses(from: thisMonth))
-                metric("Flusso netto", FinancialEngine.cashFlow(from: thisMonth))
-            }
-
-            Section("Confronto con il mese scorso") {
-                metric("Spese mese scorso", FinancialEngine.totalExpenses(from: lastMonth))
-                let delta = FinancialEngine.totalExpenses(from: thisMonth) - FinancialEngine.totalExpenses(from: lastMonth)
-                LabeledContent("Differenza spese", value: delta.formatted(.currency(code: "EUR")))
-            }
-
-            Section("Spese per categoria") {
-                if categoryTotals.isEmpty {
-                    Text("Nessuna spesa questo mese").foregroundStyle(.secondary)
-                } else {
-                    ForEach(Array(categoryTotals.enumerated()), id: \.offset) { _, item in
-                        HStack {
-                            Text(item.0)
-                            Spacer()
-                            Text(item.1, format: .currency(code: "EUR"))
-                        }
-                    }
-                }
-            }
-        }
-        .navigationTitle("Statistiche")
-    }
-
-    private func metric(_ title: String, _ value: Decimal) -> some View {
-        LabeledContent(title, value: value.formatted(.currency(code: "EUR")))
-    }
-}
-
 private struct RecurringTransactionsView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \RecurringTransaction.nextDate) private var recurring: [RecurringTransaction]
@@ -297,7 +357,7 @@ private struct RecurringTransactionsView: View {
                     Label("Registra movimenti dovuti", systemImage: "arrow.clockwise")
                 }
             } footer: {
-                Text("Crea i movimenti ricorrenti con scadenza fino a oggi e aggiorna automaticamente la prossima data.")
+                Text("I movimenti ricorrenti vengono registrati automaticamente all'apertura dell'app. Usa questo pulsante per farlo subito.")
             }
 
             ForEach(recurring) { item in
@@ -325,16 +385,7 @@ private struct RecurringTransactionsView: View {
     }
 
     private func generateDueTransactions() {
-        let now = Date()
-        for item in recurring where item.isActive && item.nextDate <= now {
-            guard let wallet = item.wallet else { continue }
-            var date = item.nextDate
-            while date <= now {
-                modelContext.insert(Transaction(type: item.type, amount: item.amount, date: date, category: item.category, title: item.title, wallet: wallet))
-                date = item.frequency.nextDate(after: date)
-            }
-            item.nextDate = date
-        }
+        RecurringEngine.generateDueTransactions(from: recurring, in: modelContext)
     }
 }
 
@@ -380,10 +431,11 @@ private struct AddRecurringView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Salva") {
                         guard let parsedAmount, let wallet else { return }
-                        modelContext.insert(RecurringTransaction(title: title.trimmingCharacters(in: .whitespacesAndNewlines), amount: parsedAmount, category: category.trimmingCharacters(in: .whitespacesAndNewlines), type: type, frequency: frequency, nextDate: nextDate, wallet: wallet))
+                        let resolvedCategory = CategoryService.resolve(category, type: type, in: modelContext)
+                        modelContext.insert(RecurringTransaction(title: title.trimmingCharacters(in: .whitespacesAndNewlines), amount: parsedAmount, category: resolvedCategory, type: type, frequency: frequency, nextDate: nextDate, wallet: wallet))
                         dismiss()
                     }
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || category.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (parsedAmount ?? 0) <= 0 || wallet == nil)
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || category.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || Transaction.isReservedCategory(category) || (parsedAmount ?? 0) <= 0 || wallet == nil)
                 }
             }
         }

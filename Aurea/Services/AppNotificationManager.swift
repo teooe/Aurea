@@ -1,10 +1,17 @@
 import Foundation
 import UserNotifications
+import SwiftData
 
 enum AppNotificationManager {
     static let relationshipKey = "aurea.notifications.relationships"
     static let recurringKey = "aurea.notifications.recurring"
     static let budgetKey = "aurea.notifications.budgets"
+    static let dailyReminderKey = "aurea.notifications.dailyReminder"
+    /// Minuti dalla mezzanotte (21:00 = 1260).
+    static let dailyReminderMinutesKey = "aurea.notifications.dailyReminderMinutes"
+    static let defaultDailyReminderMinutes = 21 * 60
+    /// Quanti giorni di promemoria programmare in anticipo; vengono riprogrammati a ogni apertura.
+    static let dailyReminderHorizon = 14
 
     static func requestAuthorization() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
@@ -15,6 +22,44 @@ enum AppNotificationManager {
         scheduleRelationships(relationships)
         scheduleRecurring(recurring)
         evaluateBudgets(budgets, transactions: transactions)
+        scheduleDailyReminders(transactions: transactions)
+    }
+
+    // MARK: - Promemoria giornaliero
+
+    /// Promemoria singoli per i prossimi giorni invece di uno ripetuto: così quello di oggi
+    /// si può saltare se hai già registrato un movimento.
+    private static func scheduleDailyReminders(transactions: [Transaction]) {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: (0..<dailyReminderHorizon).map { "daily-\($0)" })
+        guard UserDefaults.standard.bool(forKey: dailyReminderKey) else { return }
+
+        let minutes = UserDefaults.standard.object(forKey: dailyReminderMinutesKey) as? Int ?? defaultDailyReminderMinutes
+        let loggedToday = transactions.contains { Calendar.current.isDateInToday($0.date) }
+        let dates = dailyReminderDates(now: .now, minutesAfterMidnight: minutes, loggedToday: loggedToday)
+
+        for (index, date) in dates.enumerated() {
+            let content = UNMutableNotificationContent()
+            content.title = "Hai registrato le spese di oggi?"
+            content.body = "Bastano pochi secondi: apri Aurea e tocca +."
+            content.sound = .default
+            let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+            center.add(UNNotificationRequest(identifier: "daily-\(index)", content: content, trigger: UNCalendarNotificationTrigger(dateMatching: components, repeats: false)))
+        }
+    }
+
+    /// Orari dei promemoria nei prossimi giorni: esclude quelli già passati e oggi se c'è già un movimento.
+    static func dailyReminderDates(now: Date, minutesAfterMidnight: Int, loggedToday: Bool, days: Int = dailyReminderHorizon, calendar: Calendar = .current) -> [Date] {
+        let today = calendar.startOfDay(for: now)
+        let hour = min(max(minutesAfterMidnight / 60, 0), 23)
+        let minute = min(max(minutesAfterMidnight % 60, 0), 59)
+        return (0..<days).compactMap { offset in
+            if offset == 0 && loggedToday { return nil }
+            guard let day = calendar.date(byAdding: .day, value: offset, to: today),
+                  let fire = calendar.date(bySettingHour: hour, minute: minute, second: 0, of: day),
+                  fire > now else { return nil }
+            return fire
+        }
     }
 
     private static func scheduleRelationships(_ relationships: [Relationship]) {
