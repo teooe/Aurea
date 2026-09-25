@@ -186,6 +186,7 @@ struct HomeDashboardView: View {
 
     private func budgetRow(_ budget: Budget, spent: Decimal, ratio: Double) -> some View {
         let tint: Color = ratio >= 1 ? .red : (ratio >= 0.8 ? .orange : .accentColor)
+        let perDay = FinancialEngine.dailyAllowance(limit: budget.monthlyLimit, spent: spent)
         return VStack(alignment: .leading, spacing: 5) {
             HStack {
                 Text(budget.title).font(.subheadline.weight(.medium)).lineLimit(1)
@@ -196,6 +197,11 @@ struct HomeDashboardView: View {
             }
             ProgressView(value: min(max(ratio, 0), 1))
                 .tint(tint)
+            Text(ratio >= 1
+                 ? "Superato di \((spent - budget.monthlyLimit).formatted(.currency(code: "EUR")))"
+                 : "Puoi spendere \(perDay.formatted(.currency(code: "EUR"))) al giorno")
+                .font(.caption2)
+                .foregroundStyle(ratio >= 1 ? .red : .secondary)
         }
         .accessibilityElement(children: .combine)
         .accessibilityValue("\(Int(ratio * 100)) per cento")

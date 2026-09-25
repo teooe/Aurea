@@ -58,7 +58,7 @@ enum InsightsEngine {
                 }
                 if ratio >= 0.8 {
                     return Insight(id: "budget-\(budget.id)", kind: .warning, icon: "gauge.with.dots.needle.67percent", title: "Budget \(budget.title): \(Int(ratio * 100))% usato",
-                                   detail: "Restano \(euro(budget.monthlyLimit - spent)) fino a fine mese.")
+                                   detail: "Restano \(euro(budget.monthlyLimit - spent)) fino a fine mese: \(euro(FinancialEngine.dailyAllowance(limit: budget.monthlyLimit, spent: spent, now: now, calendar: calendar))) al giorno.")
                 }
                 return nil
             }

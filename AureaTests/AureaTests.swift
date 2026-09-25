@@ -488,6 +488,23 @@ struct AureaTests {
         #expect(second.title.isEmpty)
     }
 
+    @Test func dailyAllowanceSplitsRemainingBudgetOverDaysLeft() {
+        let calendar = Calendar(identifier: .gregorian)
+        let sept25 = calendar.date(from: DateComponents(year: 2026, month: 9, day: 25, hour: 12))!
+        let sept30 = calendar.date(from: DateComponents(year: 2026, month: 9, day: 30, hour: 12))!
+        let sept28 = calendar.date(from: DateComponents(year: 2026, month: 9, day: 28, hour: 12))!
+
+        // 25–30 settembre: 6 giorni, oggi compreso.
+        #expect(FinancialEngine.dailyAllowance(limit: 300, spent: 180, now: sept25, calendar: calendar) == 20)
+        // Ultimo giorno del mese: tutto il residuo.
+        #expect(FinancialEngine.dailyAllowance(limit: 300, spent: 180, now: sept30, calendar: calendar) == 120)
+        // Arrotondato per difetto: 100 € su 3 giorni sono 33,33 €, non 33,34 €.
+        #expect(FinancialEngine.dailyAllowance(limit: 100, spent: 0, now: sept28, calendar: calendar) == Decimal(string: "33.33")!)
+        // Budget esaurito o superato.
+        #expect(FinancialEngine.dailyAllowance(limit: 100, spent: 100, now: sept25, calendar: calendar) == 0)
+        #expect(FinancialEngine.dailyAllowance(limit: 100, spent: 150, now: sept25, calendar: calendar) == 0)
+    }
+
     @Test func relationshipRemainingAmountNeverBecomesNegative() {
         let relationship = Relationship(personName: "Luca", amount: 100, type: .debt, paidAmount: 40)
         #expect(relationship.remainingAmount == 60)

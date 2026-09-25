@@ -55,4 +55,17 @@ enum FinancialEngine {
             }
             .reduce(Decimal.zero) { $0 + amountInEUR(for: $1) }
     }
+
+    /// Quanto si può spendere al giorno, da oggi a fine mese compresi, per restare nel limite.
+    /// Zero se il budget è già esaurito. Arrotondato per difetto al centesimo, per non superarlo.
+    static func dailyAllowance(limit: Decimal, spent: Decimal, now: Date = .now, calendar: Calendar = .current) -> Decimal {
+        let remaining = limit - spent
+        guard remaining > 0,
+              let days = calendar.range(of: .day, in: .month, for: now)?.count else { return 0 }
+        let daysLeft = max(days - calendar.component(.day, from: now) + 1, 1)
+        var perDay = remaining / Decimal(daysLeft)
+        var rounded = Decimal()
+        NSDecimalRound(&rounded, &perDay, 2, .down)
+        return rounded
+    }
 }

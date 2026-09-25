@@ -275,11 +275,20 @@ private struct BudgetsView: View {
                     ProgressView(value: min(max(ratio, 0), 1))
                         .tint(ratio > 1 ? .red : nil)
 
-                    if ratio >= 0.8 {
-                        Text(ratio > 1 ? "Budget superato" : "Sei vicino al limite")
-                            .font(.caption)
-                            .foregroundStyle(ratio > 1 ? .red : .orange)
+                    HStack {
+                        if ratio >= 0.8 {
+                            Text(ratio > 1 ? "Budget superato" : "Sei vicino al limite")
+                                .foregroundStyle(ratio > 1 ? .red : .orange)
+                        }
+                        Spacer()
+                        if ratio < 1 {
+                            let remaining = budget.monthlyLimit - spent
+                            let perDay = FinancialEngine.dailyAllowance(limit: budget.monthlyLimit, spent: spent)
+                            Text("Restano \(remaining.formatted(.currency(code: "EUR"))) · \(perDay.formatted(.currency(code: "EUR")))/giorno")
+                                .foregroundStyle(.secondary)
+                        }
                     }
+                    .font(.caption)
                 }
                 .swipeActions {
                     Button("Archivia") { budget.isArchived = true }
