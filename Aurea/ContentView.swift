@@ -4,6 +4,7 @@ import UIKit
 
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.modelContext) private var modelContext
     @Query private var relationships: [Relationship]
     @Query private var budgets: [Budget]
     @Query private var recurringTransactions: [RecurringTransaction]
@@ -68,10 +69,10 @@ struct ContentView: View {
                     }
                 }
             }
-            refreshReminders()
+            refreshData()
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { refreshReminders() }
+            if phase == .active { refreshData() }
         }
         .sheet(isPresented: $showingQuickAdd) { GlobalQuickAddView() }
         .fullScreenCover(isPresented: Binding(
@@ -80,6 +81,11 @@ struct ContentView: View {
         )) {
             OnboardingView()
         }
+    }
+
+    private func refreshData() {
+        RecurringEngine.generateDueTransactions(from: recurringTransactions, in: modelContext)
+        refreshReminders()
     }
 
     private func refreshReminders() {

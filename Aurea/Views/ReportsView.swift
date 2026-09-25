@@ -11,7 +11,7 @@ struct ReportsView: View {
         let count = selectedRange.monthCount
         return (0..<count).reversed().compactMap { offset in
             guard let date = Calendar.current.date(byAdding: .month, value: -offset, to: .now) else { return nil }
-            let source = transactions.filter { Calendar.current.isDate($0.date, equalTo: date, toGranularity: .month) && $0.category != "Trasferimento" }
+            let source = transactions.filter { Calendar.current.isDate($0.date, equalTo: date, toGranularity: .month) && !$0.isTransfer }
             let income = source.filter { $0.type == .income }.reduce(Decimal.zero) { $0 + valueInEUR($1) }
             let expenses = source.filter { $0.type == .expense }.reduce(Decimal.zero) { $0 + valueInEUR($1) }
             return MonthReport(date: date, income: income, expenses: expenses)
@@ -19,7 +19,7 @@ struct ReportsView: View {
     }
 
     private var currentMonthTransactions: [Transaction] {
-        transactions.filter { Calendar.current.isDate($0.date, equalTo: .now, toGranularity: .month) && $0.category != "Trasferimento" }
+        transactions.filter { Calendar.current.isDate($0.date, equalTo: .now, toGranularity: .month) && !$0.isTransfer }
     }
     private var currentIncome: Decimal { currentMonthTransactions.filter { $0.type == .income }.reduce(0) { $0 + valueInEUR($1) } }
     private var currentExpenses: Decimal { currentMonthTransactions.filter { $0.type == .expense }.reduce(0) { $0 + valueInEUR($1) } }

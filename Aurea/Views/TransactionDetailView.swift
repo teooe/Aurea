@@ -12,7 +12,7 @@ struct TransactionDetailView: View {
     @State private var showingEdit = false
 
     private var isTransfer: Bool {
-        transaction.category == "Trasferimento"
+        transaction.isTransfer
     }
 
     var body: some View {
@@ -135,6 +135,7 @@ private struct EditTransactionView: View {
     private var canSave: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         !category.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !Transaction.isReservedCategory(category) &&
         (parsedAmount ?? 0) > 0 &&
         selectedWallet != nil
     }

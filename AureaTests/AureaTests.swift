@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import SwiftData
 @testable import Aurea
 
 struct AureaTests {
@@ -33,6 +34,63 @@ struct AureaTests {
         #expect(FinancialEngine.totalIncome(from: items) == 100)
         #expect(FinancialEngine.totalExpenses(from: items) == 30)
         #expect(FinancialEngine.cashFlow(from: items) == 70)
+    }
+
+    @Test func transfersAreRecognizedByGroupIDAndLegacyCategory() {
+        let linked = Transaction(type: .expense, amount: 50, category: "Casa", title: "Giroconto", transferGroupID: UUID())
+        let legacy = Transaction(type: .expense, amount: 50, category: Transaction.transferCategory, title: "Vecchio trasferimento")
+        let normal = Transaction(type: .expense, amount: 50, category: "Casa", title: "Affitto")
+
+        #expect(linked.isTransfer)
+        #expect(legacy.isTransfer)
+        #expect(!normal.isTransfer)
+        #expect(FinancialEngine.totalExpenses(from: [linked, legacy, normal]) == 50)
+    }
+
+    @Test func transferCategoryIsReserved() {
+        #expect(Transaction.isReservedCategory("Trasferimento"))
+        #expect(Transaction.isReservedCategory(" trasferimento "))
+        #expect(!Transaction.isReservedCategory("Trasporti"))
+    }
+
+    @Test func totalsConvertForeignCurrencies() {
+        let usd = Wallet(name: "USD", icon: "dollarsign.circle", currencyCode: "USD", exchangeRateToEUR: 0.9)
+        let eur = Wallet(name: "EUR", icon: "wallet.pass")
+        let items = [
+            Transaction(type: .expense, amount: 100, category: "Viaggi", title: "Hotel", wallet: usd),
+            Transaction(type: .expense, amount: 10, category: "Cibo", title: "Pranzo", wallet: eur)
+        ]
+
+        #expect(FinancialEngine.totalExpenses(from: items) == 100)
+    }
+
+    @MainActor
+    @Test func recurringEngineCatchesUpMissedOccurrences() throws {
+        let container = try ModelContainer(
+            for: Wallet.self, Transaction.self, RecurringTransaction.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = container.mainContext
+        let calendar = Calendar.current
+        let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 25, hour: 12))!
+        let start = calendar.date(from: DateComponents(year: 2026, month: 7, day: 1, hour: 9))!
+
+        let wallet = Wallet(name: "Conto", icon: "wallet.pass")
+        let rent = RecurringTransaction(title: "Affitto", amount: 500, category: "Casa", type: .expense, frequency: .monthly, nextDate: start, wallet: wallet)
+        let paused = RecurringTransaction(title: "Palestra", amount: 40, category: "Sport", type: .expense, frequency: .monthly, nextDate: start, wallet: wallet, isActive: false)
+        context.insert(wallet)
+        context.insert(rent)
+        context.insert(paused)
+
+        let created = RecurringEngine.generateDueTransactions(from: [rent, paused], in: context, now: now)
+
+        #expect(created.count == 3) // 1 luglio, 1 agosto, 1 settembre
+        #expect(created.allSatisfy { $0.title == "Affitto" })
+        #expect(calendar.component(.month, from: rent.nextDate) == 10)
+        #expect(paused.nextDate == start)
+
+        let again = RecurringEngine.generateDueTransactions(from: [rent, paused], in: context, now: now)
+        #expect(again.isEmpty)
     }
 
     @Test func relationshipRemainingAmountNeverBecomesNegative() {

@@ -25,9 +25,9 @@ struct TransactionsView: View {
             case .all:
                 matchesFilter = true
             case .expenses:
-                matchesFilter = transaction.type == .expense && transaction.category != "Trasferimento"
+                matchesFilter = transaction.type == .expense && !transaction.isTransfer
             case .income:
-                matchesFilter = transaction.type == .income && transaction.category != "Trasferimento"
+                matchesFilter = transaction.type == .income && !transaction.isTransfer
             }
 
             guard matchesFilter else { return false }
@@ -53,15 +53,11 @@ struct TransactionsView: View {
     }
 
     private var totalExpenses: Decimal {
-        filteredTransactions
-            .filter { $0.type == .expense && $0.category != "Trasferimento" }
-            .reduce(.zero) { $0 + $1.amount }
+        FinancialEngine.totalExpenses(from: filteredTransactions)
     }
 
     private var totalIncome: Decimal {
-        filteredTransactions
-            .filter { $0.type == .income && $0.category != "Trasferimento" }
-            .reduce(.zero) { $0 + $1.amount }
+        FinancialEngine.totalIncome(from: filteredTransactions)
     }
 
     var body: some View {
@@ -161,14 +157,14 @@ struct TransactionsView: View {
     }
 
     private func icon(for transaction: Transaction) -> String {
-        if transaction.category == "Trasferimento" {
+        if transaction.isTransfer {
             return "arrow.left.arrow.right.circle"
         }
         return transaction.type == .expense ? "arrow.down.circle" : "arrow.up.circle"
     }
 
     private func color(for transaction: Transaction) -> Color {
-        if transaction.category == "Trasferimento" {
+        if transaction.isTransfer {
             return Theme.Colors.primaryText
         }
         return transaction.type == .expense ? Theme.Colors.expense : Theme.Colors.income

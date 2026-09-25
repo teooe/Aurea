@@ -131,7 +131,7 @@ private struct AddCategoryView: View {
                         modelContext.insert(FinanceCategory(name: name.trimmingCharacters(in: .whitespacesAndNewlines), type: type, icon: icon))
                         dismiss()
                     }
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || Transaction.isReservedCategory(name))
                 }
             }
         }
@@ -242,9 +242,9 @@ private struct FinanceStatisticsView: View {
     }
 
     private var categoryTotals: [(String, Decimal)] {
-        let expenses = thisMonth.filter { $0.type == .expense && $0.category != "Trasferimento" }
+        let expenses = thisMonth.filter { $0.type == .expense && !$0.isTransfer }
         let grouped = Dictionary(grouping: expenses, by: \.category)
-        return grouped.map { ($0.key, $0.value.reduce(0) { $0 + $1.amount }) }.sorted { $0.1 > $1.1 }
+        return grouped.map { ($0.key, $0.value.reduce(0) { $0 + FinancialEngine.amountInEUR(for: $1) }) }.sorted { $0.1 > $1.1 }
     }
 
     var body: some View {
@@ -297,7 +297,7 @@ private struct RecurringTransactionsView: View {
                     Label("Registra movimenti dovuti", systemImage: "arrow.clockwise")
                 }
             } footer: {
-                Text("Crea i movimenti ricorrenti con scadenza fino a oggi e aggiorna automaticamente la prossima data.")
+                Text("I movimenti ricorrenti vengono registrati automaticamente all'apertura dell'app. Usa questo pulsante per farlo subito.")
             }
 
             ForEach(recurring) { item in
@@ -325,16 +325,7 @@ private struct RecurringTransactionsView: View {
     }
 
     private func generateDueTransactions() {
-        let now = Date()
-        for item in recurring where item.isActive && item.nextDate <= now {
-            guard let wallet = item.wallet else { continue }
-            var date = item.nextDate
-            while date <= now {
-                modelContext.insert(Transaction(type: item.type, amount: item.amount, date: date, category: item.category, title: item.title, wallet: wallet))
-                date = item.frequency.nextDate(after: date)
-            }
-            item.nextDate = date
-        }
+        RecurringEngine.generateDueTransactions(from: recurring, in: modelContext)
     }
 }
 
@@ -383,7 +374,7 @@ private struct AddRecurringView: View {
                         modelContext.insert(RecurringTransaction(title: title.trimmingCharacters(in: .whitespacesAndNewlines), amount: parsedAmount, category: category.trimmingCharacters(in: .whitespacesAndNewlines), type: type, frequency: frequency, nextDate: nextDate, wallet: wallet))
                         dismiss()
                     }
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || category.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (parsedAmount ?? 0) <= 0 || wallet == nil)
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || category.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || Transaction.isReservedCategory(category) || (parsedAmount ?? 0) <= 0 || wallet == nil)
                 }
             }
         }

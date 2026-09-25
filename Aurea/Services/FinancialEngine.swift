@@ -31,13 +31,13 @@ enum FinancialEngine {
 
     static func totalIncome(from transactions: [Transaction]) -> Decimal {
         transactions
-            .filter { $0.type == .income && $0.category != "Trasferimento" }
+            .filter { $0.type == .income && !$0.isTransfer }
             .reduce(Decimal.zero) { $0 + amountInEUR(for: $1) }
     }
 
     static func totalExpenses(from transactions: [Transaction]) -> Decimal {
         transactions
-            .filter { $0.type == .expense && $0.category != "Trasferimento" }
+            .filter { $0.type == .expense && !$0.isTransfer }
             .reduce(Decimal.zero) { $0 + amountInEUR(for: $1) }
     }
 
@@ -50,7 +50,7 @@ enum FinancialEngine {
         return monthTransactions
             .filter { transaction in
                 transaction.type == .expense &&
-                transaction.category != "Trasferimento" &&
+                !transaction.isTransfer &&
                 (budget.category == nil || transaction.category == budget.category)
             }
             .reduce(Decimal.zero) { $0 + amountInEUR(for: $1) }

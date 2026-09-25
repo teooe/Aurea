@@ -29,8 +29,8 @@ struct HomeDashboardView: View {
     private var todayAgenda: [AgendaItem] { agendaItems.filter { Calendar.current.isDateInToday($0.date) && !$0.isCompleted }.sorted { $0.date < $1.date } }
     private var overdueAgenda: [AgendaItem] { let start = Calendar.current.startOfDay(for: .now); return agendaItems.filter { !$0.isCompleted && $0.date < start && ($0.type == .task || $0.type == .deadline) } }
     private var upcomingAgenda: [AgendaItem] { let start = Calendar.current.startOfDay(for: .now); return agendaItems.filter { !$0.isCompleted && $0.date >= start }.sorted { $0.date < $1.date } }
-    private var monthExpenses: Decimal { monthlyTransactions.filter { $0.type == .expense && $0.category != "Trasferimento" }.reduce(0) { $0 + valueInEUR($1) } }
-    private var monthIncome: Decimal { monthlyTransactions.filter { $0.type == .income && $0.category != "Trasferimento" }.reduce(0) { $0 + valueInEUR($1) } }
+    private var monthExpenses: Decimal { monthlyTransactions.filter { $0.type == .expense && !$0.isTransfer }.reduce(0) { $0 + valueInEUR($1) } }
+    private var monthIncome: Decimal { monthlyTransactions.filter { $0.type == .income && !$0.isTransfer }.reduce(0) { $0 + valueInEUR($1) } }
     private var monthBalance: Decimal { monthIncome - monthExpenses }
     private var activeBudgets: [Budget] { budgets.filter { !$0.isArchived } }
     private var activeRecurring: [RecurringTransaction] { recurringTransactions.filter { $0.isActive } }

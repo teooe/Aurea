@@ -449,14 +449,14 @@ struct AureaAssistantView: View {
         guard let previous = Calendar.current.date(byAdding: .month, value: -1, to: .now) else { return [] }
         return transactions.filter { Calendar.current.isDate($0.date, equalTo: previous, toGranularity: .month) }
     }
-    private var currentMonthExpenses: [Transaction] { currentMonthTransactions.filter { $0.type == .expense && $0.category != "Trasferimento" } }
+    private var currentMonthExpenses: [Transaction] { currentMonthTransactions.filter { $0.type == .expense && !$0.isTransfer } }
     private var monthExpenses: Decimal { currentMonthExpenses.reduce(0) { $0 + valueInEUR($1) } }
-    private var monthIncome: Decimal { currentMonthTransactions.filter { $0.type == .income && $0.category != "Trasferimento" }.reduce(0) { $0 + valueInEUR($1) } }
+    private var monthIncome: Decimal { currentMonthTransactions.filter { $0.type == .income && !$0.isTransfer }.reduce(0) { $0 + valueInEUR($1) } }
     private var monthBalance: Decimal { monthIncome - monthExpenses }
-    private var previousMonthExpenses: Decimal { previousMonthTransactions.filter { $0.type == .expense && $0.category != "Trasferimento" }.reduce(0) { $0 + valueInEUR($1) } }
-    private var previousMonthIncome: Decimal { previousMonthTransactions.filter { $0.type == .income && $0.category != "Trasferimento" }.reduce(0) { $0 + valueInEUR($1) } }
+    private var previousMonthExpenses: Decimal { previousMonthTransactions.filter { $0.type == .expense && !$0.isTransfer }.reduce(0) { $0 + valueInEUR($1) } }
+    private var previousMonthIncome: Decimal { previousMonthTransactions.filter { $0.type == .income && !$0.isTransfer }.reduce(0) { $0 + valueInEUR($1) } }
     private var previousMonthBalance: Decimal { previousMonthIncome - previousMonthExpenses }
-    private var todayExpenses: Decimal { transactions.filter { Calendar.current.isDateInToday($0.date) && $0.type == .expense && $0.category != "Trasferimento" }.reduce(0) { $0 + valueInEUR($1) } }
+    private var todayExpenses: Decimal { transactions.filter { Calendar.current.isDateInToday($0.date) && $0.type == .expense && !$0.isTransfer }.reduce(0) { $0 + valueInEUR($1) } }
     private var upcomingAgenda: [AgendaItem] { agendaItems.filter { !$0.isCompleted && $0.date >= Calendar.current.startOfDay(for: .now) }.sorted { $0.date < $1.date } }
     private var topExpenseCategory: (name: String, amount: Decimal)? {
         let grouped = Dictionary(grouping: currentMonthExpenses, by: { $0.category })

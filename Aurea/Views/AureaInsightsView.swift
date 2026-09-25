@@ -163,15 +163,15 @@ struct AureaInsightsView: View {
     }
 
     private func expenseTotal(_ source: [Transaction]) -> Decimal {
-        source.filter { $0.type == .expense && $0.category != "Trasferimento" }.reduce(0) { $0 + valueInEUR($1) }
+        source.filter { $0.type == .expense && !$0.isTransfer }.reduce(0) { $0 + valueInEUR($1) }
     }
 
     private func incomeTotal(_ source: [Transaction]) -> Decimal {
-        source.filter { $0.type == .income && $0.category != "Trasferimento" }.reduce(0) { $0 + valueInEUR($1) }
+        source.filter { $0.type == .income && !$0.isTransfer }.reduce(0) { $0 + valueInEUR($1) }
     }
 
     private var topExpenseCategory: (name: String, amount: Decimal)? {
-        let expenses = monthTransactions.filter { $0.type == .expense && $0.category != "Trasferimento" }
+        let expenses = monthTransactions.filter { $0.type == .expense && !$0.isTransfer }
         let grouped = Dictionary(grouping: expenses, by: \Transaction.category)
         return grouped.map { key, value in
             (name: key, amount: value.reduce(0) { $0 + valueInEUR($1) })

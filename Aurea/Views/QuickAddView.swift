@@ -12,6 +12,7 @@ struct QuickAddView: View {
     @State private var type: TransactionType = .expense
     @State private var title = ""
     @State private var amount = ""
+    @State private var date = Date()
     @State private var category = ""
     @State private var selectedWallet: Wallet?
     @State private var destinationWallet: Wallet?
@@ -23,7 +24,7 @@ struct QuickAddView: View {
     private var activeWallets: [Wallet] { wallets.filter { !$0.isArchived } }
 
     private var suggestedCategories: [String] {
-        if type == .transfer { return ["Trasferimento"] }
+        if type == .transfer { return [Transaction.transferCategory] }
         let custom = financeCategories.filter { $0.type == type && !$0.isArchived }.map(\.name)
         if !custom.isEmpty { return custom }
         return type == .expense ? fallbackExpenseCategories : fallbackIncomeCategories
@@ -34,7 +35,7 @@ struct QuickAddView: View {
         var result: [String] = []
         for transaction in transactions where transaction.type == type {
             let value = transaction.category.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !value.isEmpty, value != "Trasferimento", !seen.contains(value) else { continue }
+            guard !value.isEmpty, !Transaction.isReservedCategory(value), !seen.contains(value) else { continue }
             seen.insert(value)
             result.append(value)
             if result.count == 3 { break }
@@ -54,11 +55,11 @@ struct QuickAddView: View {
                     .pickerStyle(.segmented)
                     .onChange(of: type) { _, newValue in
                         if newValue == .transfer {
-                            category = "Trasferimento"
+                            category = Transaction.transferCategory
                             if destinationWallet == nil || destinationWallet === selectedWallet {
                                 destinationWallet = activeWallets.first { $0 !== selectedWallet }
                             }
-                        } else if category == "Trasferimento" {
+                        } else if category == Transaction.transferCategory {
                             category = ""
                         }
                     }
@@ -67,9 +68,16 @@ struct QuickAddView: View {
                 Section("Movimento") {
                     TextField("Titolo", text: $title)
                     TextField("Importo", text: $amount).keyboardType(.decimalPad)
+                    DatePicker("Data", selection: $date)
 
                     if type != .transfer {
                         TextField("Categoria", text: $category)
+
+                        if Transaction.isReservedCategory(category) {
+                            Text("“\(Transaction.transferCategory)” è riservata ai trasferimenti: scegli un'altra categoria.")
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
 
                         if !recentCategories.isEmpty {
                             Text("Usate di recente").font(.caption).foregroundStyle(.secondary)
@@ -179,7 +187,7 @@ struct QuickAddView: View {
         if type == .transfer {
             return baseValid && activeWallets.count >= 2 && destinationWallet != nil && destinationWallet !== selectedWallet
         }
-        return baseValid && !category.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return baseValid && !category.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !Transaction.isReservedCategory(category)
     }
 
     private var confirmationText: String {
@@ -199,12 +207,12 @@ struct QuickAddView: View {
             guard let destinationWallet, destinationWallet !== wallet,
                   let destinationAmount = convertedDestinationAmount else { return }
             let groupID = UUID()
-            let outgoing = Transaction(type: .expense, amount: decimalAmount, category: "Trasferimento", title: "\(cleanTitle) → \(destinationWallet.name)", wallet: wallet, transferGroupID: groupID)
-            let incoming = Transaction(type: .income, amount: destinationAmount, category: "Trasferimento", title: "\(cleanTitle) ← \(wallet.name)", wallet: destinationWallet, transferGroupID: groupID)
+            let outgoing = Transaction(type: .expense, amount: decimalAmount, date: date, category: Transaction.transferCategory, title: "\(cleanTitle) → \(destinationWallet.name)", wallet: wallet, transferGroupID: groupID)
+            let incoming = Transaction(type: .income, amount: destinationAmount, date: date, category: Transaction.transferCategory, title: "\(cleanTitle) ← \(wallet.name)", wallet: destinationWallet, transferGroupID: groupID)
             modelContext.insert(outgoing)
             modelContext.insert(incoming)
         } else {
-            modelContext.insert(Transaction(type: type, amount: decimalAmount, category: category.trimmingCharacters(in: .whitespacesAndNewlines), title: cleanTitle, wallet: wallet))
+            modelContext.insert(Transaction(type: type, amount: decimalAmount, date: date, category: category.trimmingCharacters(in: .whitespacesAndNewlines), title: cleanTitle, wallet: wallet))
         }
 
         dismiss()
