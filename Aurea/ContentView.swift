@@ -84,6 +84,7 @@ struct ContentView: View {
     }
 
     private func refreshData() {
+        CategoryService.synchronize(in: modelContext)
         RecurringEngine.generateDueTransactions(from: recurringTransactions, in: modelContext)
         refreshReminders()
     }

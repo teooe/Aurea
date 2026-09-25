@@ -422,7 +422,8 @@ struct AureaAssistantView: View {
 
     private func execute(_ action: PendingAssistantAction) {
         switch action.kind {
-        case let .transaction(type, title, amount, category, wallet, date):
+        case let .transaction(type, title, amount, suggestedCategory, wallet, date):
+            let category = CategoryService.resolve(suggestedCategory, type: type, in: modelContext)
             modelContext.insert(Transaction(type: type, amount: amount, date: date, category: category, title: title, wallet: wallet))
             let verb = type == .income ? "entrata" : "spesa"
             messages.append(AssistantMessage(role: .assistant, text: "Fatto: ho registrato l'\(verb) \(title), \(amount.formatted(.currency(code: wallet.currencyCode))), in \(category), con data \(date.formatted(date: .abbreviated, time: .omitted))."))

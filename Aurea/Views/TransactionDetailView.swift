@@ -107,6 +107,7 @@ struct TransactionDetailView: View {
 
 private struct EditTransactionView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @Query private var wallets: [Wallet]
 
     let transaction: Transaction
@@ -181,7 +182,7 @@ private struct EditTransactionView: View {
         guard let parsedAmount, let selectedWallet else { return }
         transaction.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         transaction.amount = parsedAmount
-        transaction.category = category.trimmingCharacters(in: .whitespacesAndNewlines)
+        transaction.category = CategoryService.resolve(category, type: type, in: modelContext)
         transaction.type = type
         transaction.wallet = selectedWallet
         transaction.date = date

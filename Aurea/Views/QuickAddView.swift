@@ -18,24 +18,20 @@ struct QuickAddView: View {
     @State private var destinationWallet: Wallet?
     @FocusState private var amountFocused: Bool
 
-    private let fallbackExpenseCategories = ["Alimentari", "Trasporti", "Casa", "Svago", "Salute", "Shopping", "Altro"]
-    private let fallbackIncomeCategories = ["Stipendio", "Regalo", "Rimborso", "Vendita", "Altro"]
-
     private var activeWallets: [Wallet] { wallets.filter { !$0.isArchived } }
 
     private var suggestedCategories: [String] {
         if type == .transfer { return [Transaction.transferCategory] }
-        let custom = financeCategories.filter { $0.type == type && !$0.isArchived }.map(\.name)
-        if !custom.isEmpty { return custom }
-        return type == .expense ? fallbackExpenseCategories : fallbackIncomeCategories
+        return financeCategories.filter { $0.type == type && !$0.isArchived }.map(\.name)
     }
 
     private var recentCategories: [String] {
         var seen = Set<String>()
         var result: [String] = []
-        for transaction in transactions where transaction.type == type {
+        for transaction in transactions where transaction.type == type && !transaction.isTransfer {
             let value = transaction.category.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !value.isEmpty, !Transaction.isReservedCategory(value), !seen.contains(value) else { continue }
+            guard !value.isEmpty, !Transaction.isReservedCategory(value), !seen.contains(value),
+                  CategoryService.find(value, type: type, in: financeCategories)?.isArchived != true else { continue }
             seen.insert(value)
             result.append(value)
             if result.count == 3 { break }
@@ -179,7 +175,7 @@ struct QuickAddView: View {
         return Button {
             category = isSelected ? "" : name
         } label: {
-            Text(name)
+            Label(name, systemImage: CategoryService.find(name, type: type, in: financeCategories)?.icon ?? "tag")
                 .font(.subheadline.weight(isSelected ? .semibold : .regular))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
@@ -230,8 +226,9 @@ struct QuickAddView: View {
             modelContext.insert(incoming)
         } else {
             // Senza descrizione il movimento prende il nome della categoria.
-            let cleanTitle = trimmedTitle.isEmpty ? trimmedCategory : trimmedTitle
-            modelContext.insert(Transaction(type: type, amount: decimalAmount, date: date, category: trimmedCategory, title: cleanTitle, wallet: wallet))
+            let resolvedCategory = CategoryService.resolve(trimmedCategory, type: type, in: modelContext)
+            let cleanTitle = trimmedTitle.isEmpty ? resolvedCategory : trimmedTitle
+            modelContext.insert(Transaction(type: type, amount: decimalAmount, date: date, category: resolvedCategory, title: cleanTitle, wallet: wallet))
         }
 
         dismiss()

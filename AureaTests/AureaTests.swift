@@ -93,6 +93,108 @@ struct AureaTests {
         #expect(again.isEmpty)
     }
 
+    @MainActor
+    private func makeCategoryContainer() throws -> ModelContainer {
+        try ModelContainer(
+            for: Wallet.self, Transaction.self, RecurringTransaction.self, Budget.self, FinanceCategory.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+    }
+
+    @MainActor
+    @Test func synchronizeRegistersTypedCategoriesAndUnifiesCase() throws {
+        let container = try makeCategoryContainer()
+        let context = container.mainContext
+        let cibo = FinanceCategory(name: "Cibo", type: .expense)
+        context.insert(cibo)
+        let lower = Transaction(type: .expense, amount: 10, category: "cibo ", title: "Pizza")
+        let custom = Transaction(type: .expense, amount: 20, category: "Palestra", title: "Abbonamento")
+        let transferHalf = Transaction(type: .expense, amount: 30, category: Transaction.transferCategory, title: "Giroconto", transferGroupID: UUID())
+        [lower, custom, transferHalf].forEach { context.insert($0) }
+
+        CategoryService.synchronize(in: context)
+        CategoryService.synchronize(in: context) // idempotente
+        try context.save()
+
+        let expenseNames = try context.fetch(FetchDescriptor<FinanceCategory>()).filter { $0.type == .expense }.map(\.name)
+        #expect(lower.category == "Cibo")
+        #expect(expenseNames.filter { $0 == "Palestra" }.count == 1)
+        #expect(!expenseNames.contains(Transaction.transferCategory))
+        #expect(expenseNames.filter { $0.lowercased() == "cibo" }.count == 1)
+    }
+
+    @MainActor
+    @Test func synchronizeSeedsDefaultsOnlyWhenTypeIsEmpty() throws {
+        let container = try makeCategoryContainer()
+        let context = container.mainContext
+        context.insert(FinanceCategory(name: "Mia", type: .expense))
+
+        CategoryService.synchronize(in: context)
+        try context.save()
+
+        let categories = try context.fetch(FetchDescriptor<FinanceCategory>())
+        #expect(categories.filter { $0.type == .expense }.map(\.name) == ["Mia"])
+        #expect(categories.filter { $0.type == .income }.count == CategoryService.defaultIncomeCategories.count)
+    }
+
+    @MainActor
+    @Test func resolveReusesExistingCategoryAndRestoresArchived() throws {
+        let container = try makeCategoryContainer()
+        let context = container.mainContext
+        let archived = FinanceCategory(name: "Viaggi", type: .expense, isArchived: true)
+        context.insert(archived)
+
+        #expect(CategoryService.resolve("  viaggi", type: .expense, in: context) == "Viaggi")
+        #expect(!archived.isArchived)
+
+        #expect(CategoryService.resolve("Libri", type: .expense, in: context) == "Libri")
+        try context.save()
+        let names = try context.fetch(FetchDescriptor<FinanceCategory>()).map(\.name)
+        #expect(names.contains("Libri"))
+    }
+
+    @MainActor
+    @Test func renamePropagatesToTransactionsRecurringAndBudgets() throws {
+        let container = try makeCategoryContainer()
+        let context = container.mainContext
+        let category = FinanceCategory(name: "Cibo", type: .expense)
+        let expense = Transaction(type: .expense, amount: 10, category: "Cibo", title: "Pizza")
+        let incomeSameName = Transaction(type: .income, amount: 5, category: "Cibo", title: "Rimborso cena")
+        let recurring = RecurringTransaction(title: "Spesa", amount: 50, category: "Cibo", type: .expense, frequency: .weekly, nextDate: .now)
+        let budget = Budget(title: "Mangiare", category: "Cibo", monthlyLimit: 300)
+        context.insert(category)
+        [expense, incomeSameName].forEach { context.insert($0) }
+        context.insert(recurring)
+        context.insert(budget)
+
+        try CategoryService.rename(category, to: "Alimentari", in: context)
+
+        #expect(category.name == "Alimentari")
+        #expect(expense.category == "Alimentari")
+        #expect(incomeSameName.category == "Cibo")
+        #expect(recurring.category == "Alimentari")
+        #expect(budget.category == "Alimentari")
+    }
+
+    @MainActor
+    @Test func renameToExistingNameMergesCategories() throws {
+        let container = try makeCategoryContainer()
+        let context = container.mainContext
+        let source = FinanceCategory(name: "Supermercato", type: .expense)
+        let target = FinanceCategory(name: "Alimentari", type: .expense)
+        let expense = Transaction(type: .expense, amount: 40, category: "Supermercato", title: "Spesa")
+        context.insert(source)
+        context.insert(target)
+        context.insert(expense)
+
+        try CategoryService.rename(source, to: "alimentari", in: context)
+
+        #expect(expense.category == "Alimentari")
+        try context.save()
+        let names = try context.fetch(FetchDescriptor<FinanceCategory>()).map(\.name)
+        #expect(names == ["Alimentari"])
+    }
+
     @Test func relationshipRemainingAmountNeverBecomesNegative() {
         let relationship = Relationship(personName: "Luca", amount: 100, type: .debt, paidAmount: 40)
         #expect(relationship.remainingAmount == 60)
