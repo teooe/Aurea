@@ -36,9 +36,9 @@ struct ContentView: View {
                     .tag(4)
                     .tabItem { Label("Aggiungi", systemImage: "plus.circle.fill") }
 
-                AureaAssistantView()
+                AnalysisView()
                     .tag(3)
-                    .tabItem { Label("Aurea", systemImage: "sparkles") }
+                    .tabItem { Label("Analisi", systemImage: "sparkles") }
             }
             .opacity(showingBrandSplash && !isUITesting ? 0 : 1)
 

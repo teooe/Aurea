@@ -329,6 +329,74 @@ struct AureaTests {
         #expect(snapshot.expensesToday(at: calendar.date(byAdding: .day, value: 1, to: now)!, calendar: calendar) == 0)
     }
 
+    @Test func insightsFlagBudgetsOverAndNearLimit() {
+        let now = Date.now
+        let items = [
+            Transaction(type: .expense, amount: 120, date: now, category: "Svago", title: "Concerto"),
+            Transaction(type: .expense, amount: 85, date: now, category: "Cibo", title: "Spesa"),
+        ]
+        let over = Budget(title: "Svago", category: "Svago", monthlyLimit: 100)
+        let near = Budget(title: "Cibo", category: "Cibo", monthlyLimit: 100)
+        let fine = Budget(title: "Casa", category: "Casa", monthlyLimit: 500)
+
+        let insights = InsightsEngine.budgetInsights([fine, near, over], transactions: items, now: now, calendar: .current)
+
+        #expect(insights.map(\.kind) == [.warning, .alert])
+        #expect(insights.map(\.title) == ["Budget Cibo: 85% usato", "Budget Svago superato"])
+    }
+
+    @Test func insightsComparePaceWithSamePeriodOfLastMonth() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 10, hour: 12))!
+        let items = [
+            // Stesso periodo del mese scorso (1–10 agosto): 100 €. Dopo il 10 agosto non conta.
+            Transaction(type: .expense, amount: 100, date: calendar.date(from: DateComponents(year: 2026, month: 8, day: 5))!, category: "Svago", title: "Agosto"),
+            Transaction(type: .expense, amount: 900, date: calendar.date(from: DateComponents(year: 2026, month: 8, day: 25))!, category: "Casa", title: "Fine agosto"),
+            // Questo mese: 150 €, tutto in Svago.
+            Transaction(type: .expense, amount: 150, date: calendar.date(from: DateComponents(year: 2026, month: 9, day: 3))!, category: "Svago", title: "Settembre"),
+        ]
+
+        let insights = InsightsEngine.paceInsights(items, now: now, calendar: calendar)
+
+        let pace = insights.first { $0.id == "pace" }
+        #expect(pace?.kind == .warning)
+        #expect(pace?.detail.contains("50%") == true)
+        let saving = insights.first { $0.id == "saving" }
+        #expect(saving?.title == "Dove risparmiare: Svago")
+    }
+
+    @Test func insightsReportOverdueDebtsAndUpcomingRecurring() {
+        let calendar = Calendar.current
+        let now = Date.now
+        let overdue = Relationship(personName: "Luca", amount: 50, type: .debt, dueDate: calendar.date(byAdding: .day, value: -3, to: now))
+        let closed = Relationship(personName: "Anna", amount: 20, type: .credit, isClosed: true)
+        let rent = RecurringTransaction(title: "Affitto", amount: 500, category: "Casa", type: .expense, frequency: .monthly, nextDate: calendar.date(byAdding: .day, value: 2, to: now)!)
+        let later = RecurringTransaction(title: "Assicurazione", amount: 300, category: "Casa", type: .expense, frequency: .yearly, nextDate: calendar.date(byAdding: .day, value: 20, to: now)!)
+
+        let relationships = InsightsEngine.relationshipInsights([overdue, closed], now: now, calendar: calendar)
+        let recurring = InsightsEngine.recurringInsights([rent, later], now: now, calendar: calendar)
+
+        #expect(relationships.first?.kind == .alert)
+        #expect(relationships.first?.title == "Debito scaduto con Luca")
+        #expect(recurring.count == 1)
+        #expect(recurring.first?.title == "1 pagamento ricorrente in settimana")
+    }
+
+    @Test func insightsAreSortedBySeverityAndNeverEmpty() {
+        let empty = InsightsEngine.insights(from: .init(transactions: []))
+        #expect(empty.map(\.id) == ["all-good"])
+
+        let now = Date.now
+        let input = InsightsEngine.Input(
+            transactions: [Transaction(type: .expense, amount: 200, date: now, category: "Svago", title: "Concerto")],
+            budgets: [Budget(title: "Svago", category: "Svago", monthlyLimit: 100)],
+            relationships: [Relationship(personName: "Luca", amount: 10, type: .credit)]
+        )
+        let kinds = InsightsEngine.insights(from: input, now: now).map(\.kind)
+        #expect(kinds == kinds.sorted())
+        #expect(kinds.first == .alert)
+    }
+
     @Test func relationshipRemainingAmountNeverBecomesNegative() {
         let relationship = Relationship(personName: "Luca", amount: 100, type: .debt, paidAmount: 40)
         #expect(relationship.remainingAmount == 60)

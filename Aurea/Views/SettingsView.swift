@@ -24,7 +24,7 @@ struct SettingsView: View {
     @State private var showingFinance = false
     @State private var showingAgenda = false
     @State private var showingQuickAdd = false
-    @State private var showingInsights = false
+    @State private var showingReports = false
     @State private var showingOnboarding = false
     @State private var showingImporter = false
     @State private var showingRestoreConfirmation = false
@@ -46,7 +46,7 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section("Analisi") {
-                    navigationButton("Panoramica completa", icon: "rectangle.3.group") { showingInsights = true }
+                    navigationButton("Report", icon: "chart.bar.xaxis") { showingReports = true }
                     Button { runDiagnostics() } label: { Label("Verifica integrità dati", systemImage: "checkmark.shield") }
                 }
 
@@ -127,7 +127,7 @@ struct SettingsView: View {
             .navigationTitle("Impostazioni")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fine") { dismiss() } } }
-            .sheet(isPresented: $showingInsights) { AureaInsightsView() }
+            .sheet(isPresented: $showingReports) { NavigationStack { ReportsView(showsDoneButton: true) } }
             .sheet(isPresented: $showingFinance) { FinanceCenterView() }
             .sheet(isPresented: $showingAgenda) { AgendaView() }
             .sheet(isPresented: $showingQuickAdd) { GlobalQuickAddView() }

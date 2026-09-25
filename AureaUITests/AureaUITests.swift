@@ -13,13 +13,13 @@ final class AureaUITests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["Home"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.tabBars.buttons["Movimenti"].exists)
         XCTAssertTrue(app.tabBars.buttons["Aggiungi"].exists)
-        XCTAssertTrue(app.tabBars.buttons["Aurea"].exists)
+        XCTAssertTrue(app.tabBars.buttons["Analisi"].exists)
 
         app.tabBars.buttons["Movimenti"].tap()
         XCTAssertTrue(app.navigationBars["Movimenti"].waitForExistence(timeout: 3))
 
-        app.tabBars.buttons["Aurea"].tap()
-        XCTAssertTrue(app.navigationBars["Aurea"].waitForExistence(timeout: 3))
+        app.tabBars.buttons["Analisi"].tap()
+        XCTAssertTrue(app.navigationBars["Analisi"].waitForExistence(timeout: 3))
 
         app.tabBars.buttons["Home"].tap()
         app.tabBars.buttons["Aggiungi"].tap()
@@ -37,7 +37,7 @@ final class AureaUITests: XCTestCase {
         XCTAssertTrue(settingsButton.waitForExistence(timeout: 5))
         settingsButton.tap()
 
-        XCTAssertTrue(element(label: "Panoramica completa", in: app).waitForExistence(timeout: 5))
+        XCTAssertTrue(element(label: "Report", in: app).waitForExistence(timeout: 5))
         XCTAssertTrue(element(label: "Centro finanziario", in: app).exists)
         XCTAssertTrue(element(label: "Agenda completa", in: app).exists)
         XCTAssertTrue(app.buttons["Fine"].exists)
@@ -46,7 +46,13 @@ final class AureaUITests: XCTestCase {
     @MainActor
     func testAgendaCoreControlsExist() throws {
         let app = launchApp()
-        app.tabBars.buttons["Agenda"].tap()
+        // L'Agenda non è più in Home né tra i tab: si apre dalle Impostazioni.
+        let settingsButton = app.buttons["Impostazioni"]
+        XCTAssertTrue(settingsButton.waitForExistence(timeout: 5))
+        settingsButton.tap()
+        let agendaButton = element(label: "Agenda completa", in: app)
+        XCTAssertTrue(agendaButton.waitForExistence(timeout: 5))
+        agendaButton.tap()
 
         XCTAssertTrue(app.navigationBars["Agenda"].waitForExistence(timeout: 5))
         XCTAssertTrue(element(label: "Oggi", in: app).waitForExistence(timeout: 3))
@@ -58,17 +64,13 @@ final class AureaUITests: XCTestCase {
     }
 
     @MainActor
-    func testAssistantScreenIsInteractive() throws {
+    func testAnalysisShowsOverviewAndInsights() throws {
         let app = launchApp()
-        app.tabBars.buttons["Aurea"].tap()
+        app.tabBars.buttons["Analisi"].tap()
 
-        XCTAssertTrue(app.navigationBars["Aurea"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.tabBars.buttons["Aurea"].isSelected)
-
-        let hasTextField = app.textFields.firstMatch.exists
-        let hasTextView = app.textViews.firstMatch.exists
-        let hasButton = app.buttons.count > 0
-        XCTAssertTrue(hasTextField || hasTextView || hasButton)
+        XCTAssertTrue(app.navigationBars["Analisi"].waitForExistence(timeout: 5))
+        XCTAssertTrue(element(label: "Patrimonio", in: app).waitForExistence(timeout: 3))
+        XCTAssertTrue(element(label: "Report completo", in: app).exists)
     }
 
     @MainActor
