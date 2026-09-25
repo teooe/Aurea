@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 /// Esporta i movimenti in un CSV pensato per Excel e Numbers in italiano:
 /// separatore ";", virgola decimale, importi con segno (spese negative) e BOM UTF-8
@@ -27,7 +28,7 @@ enum CSVExporter {
                 number(amountInEUR, scale: 2),
                 transaction.wallet?.name ?? "",
             ]
-            lines.append(fields.map(escape).joined(separator: separator))
+            lines.append(fields.map { escape($0) }.joined(separator: separator))
         }
         return "\u{FEFF}" + lines.joined(separator: "\r\n") + "\r\n"
     }

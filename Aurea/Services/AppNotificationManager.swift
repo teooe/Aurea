@@ -1,5 +1,6 @@
 import Foundation
 import UserNotifications
+import SwiftData
 
 enum AppNotificationManager {
     static let relationshipKey = "aurea.notifications.relationships"

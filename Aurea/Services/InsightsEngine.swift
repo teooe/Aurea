@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 /// Un consiglio mostrato nel tab Analisi.
 struct Insight: Identifiable, Equatable {

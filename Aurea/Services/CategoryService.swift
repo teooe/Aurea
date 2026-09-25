@@ -58,7 +58,7 @@ enum CategoryService {
         }
         if category.type == .expense {
             for budget in try context.fetch(FetchDescriptor<Budget>())
-            where budget.category.map(normalizedKey) == oldKey {
+            where budget.category.map({ normalizedKey($0) }) == oldKey {
                 budget.category = finalName
             }
         }
