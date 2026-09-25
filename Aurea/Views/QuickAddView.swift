@@ -1,6 +1,7 @@
 import PhotosUI
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct QuickAddView: View {
     @Environment(\.modelContext) private var modelContext

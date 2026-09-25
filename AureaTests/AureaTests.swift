@@ -3,6 +3,8 @@ import Foundation
 import SwiftData
 @testable import Aurea
 
+// Il target dell'app isola i tipi su MainActor per impostazione predefinita: la suite gira lì.
+@MainActor
 struct AureaTests {
 
     @Test func walletBalanceHandlesIncomeAndExpenses() {
