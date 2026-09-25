@@ -43,3 +43,5 @@ Controlla anche che il widget abbia lo stesso *Team* dell'app e *Minimum Deploym
   registrata con Siri. Il widget legge solo quello e non tocca il database.
 - A mezzanotte il widget azzera "Oggi". Se è cambiato il mese e l'app non è ancora stata aperta,
   invita ad aprirla invece di mostrare i totali del mese precedente.
+- Gli importi sono segnati come dati sensibili: se in *Impostazioni → Face ID e codice* hai disattivato
+  i widget a telefono bloccato, sulla schermata di blocco appaiono nascosti.

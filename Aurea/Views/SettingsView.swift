@@ -25,6 +25,7 @@ struct SettingsView: View {
     @State private var showingAgenda = false
     @State private var showingQuickAdd = false
     @State private var showingReports = false
+    private let appLock = AppLock.shared
     @State private var showingOnboarding = false
     @State private var showingImporter = false
     @State private var showingRestoreConfirmation = false
@@ -55,6 +56,17 @@ struct SettingsView: View {
                     navigationButton("Centro finanziario", icon: "chart.pie") { showingFinance = true }
                     navigationButton("Agenda completa", icon: "calendar") { showingAgenda = true }
                 }
+
+                Section {
+                    Toggle("Blocca con \(appLock.methodName)", isOn: Binding(
+                        get: { appLock.isEnabled },
+                        set: { newValue in Task { await appLock.setEnabled(newValue) } }
+                    ))
+                    if let error = appLock.lastError {
+                        Text(error).font(.caption).foregroundStyle(.red)
+                    }
+                } header: { Text("Privacy") }
+                footer: { Text("Aurea si blocca quando esci dall'app e resta coperta nel selettore delle app. Se \(appLock.methodName) non riesce puoi usare il codice del dispositivo.") }
 
                 Section {
                     Toggle("Debiti e crediti", isOn: $relationshipNotifications)

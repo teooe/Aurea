@@ -6,6 +6,8 @@ import SwiftData
 nonisolated struct AddExpenseIntent: AppIntent {
     static let title: LocalizedStringResource = "Registra spesa"
     static let description = IntentDescription("Registra una spesa in Aurea senza aprire l'app.")
+    /// Con il telefono bloccato Siri chiede prima di sbloccarlo: nessuno può registrare spese al posto tuo.
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication
 
     @Parameter(title: "Importo", requestValueDialog: "Quanto hai speso?")
     var amount: Double
@@ -63,6 +65,8 @@ nonisolated struct AddExpenseIntent: AppIntent {
 nonisolated struct MonthSummaryIntent: AppIntent {
     static let title: LocalizedStringResource = "Spese del mese"
     static let description = IntentDescription("Ti dice quanto hai speso e guadagnato questo mese.")
+    /// La risposta rivela dati finanziari: a telefono bloccato serve prima lo sblocco.
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {

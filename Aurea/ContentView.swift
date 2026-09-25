@@ -70,9 +70,11 @@ struct ContentView: View {
                     }
                 }
             }
+            if !isUITesting { AppLock.shared.lockOnLaunch() }
             refreshData()
         }
         .onChange(of: scenePhase) { _, phase in
+            if !isUITesting { AppLock.shared.handle(phase) }
             switch phase {
             case .active: refreshData()
             // Uscendo dall'app il widget riceve i dati aggiornati con le modifiche appena fatte.

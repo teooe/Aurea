@@ -56,6 +56,7 @@ struct SpendingWidgetView: View {
         case .accessoryInline:
             if let snapshot {
                 Text("Speso \(euro(snapshot.monthExpenses)) questo mese")
+                    .privacySensitive()
             } else {
                 Text("Apri Aurea")
             }
@@ -65,8 +66,10 @@ struct SpendingWidgetView: View {
                 Text(snapshot.map { euro($0.monthExpenses) } ?? "—")
                     .font(.headline)
                     .widgetAccentable()
+                    .privacySensitive()
                 if let snapshot {
                     Text("Oggi \(euro(snapshot.expensesToday(at: entry.date)))").font(.caption2)
+                        .privacySensitive()
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -94,6 +97,7 @@ struct SpendingWidgetView: View {
                     .font(.system(.title2, design: .rounded).weight(.bold))
                     .minimumScaleFactor(0.6)
                     .lineLimit(1)
+                    .privacySensitive()
                 Text("spesi")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -104,6 +108,7 @@ struct SpendingWidgetView: View {
                     Text("Oggi")
                     Spacer()
                     Text(euro(snapshot.expensesToday(at: entry.date))).fontWeight(.semibold)
+                        .privacySensitive()
                 }
                 .font(.caption)
             } else {
@@ -131,13 +136,14 @@ struct SpendingWidgetView: View {
                             Text("\(Int(budget.ratio * 100))%").monospacedDigit()
                         }
                         .font(.caption)
+                        .privacySensitive()
                         ProgressView(value: min(max(budget.ratio, 0), 1))
                             .tint(budget.ratio >= 1 ? .red : (budget.ratio >= 0.8 ? .orange : .accentColor))
                     }
                 }
             } else if let snapshot {
-                Text("Entrate \(euro(snapshot.monthIncome))").font(.caption)
-                Text("Bilancio \(euro(snapshot.monthBalance))").font(.caption)
+                Text("Entrate \(euro(snapshot.monthIncome))").font(.caption).privacySensitive()
+                Text("Bilancio \(euro(snapshot.monthBalance))").font(.caption).privacySensitive()
             }
             Spacer(minLength: 0)
         }
