@@ -472,6 +472,22 @@ struct AureaTests {
         #expect(dates.first.map { calendar.dateComponents([.day, .hour, .minute], from: $0) } == DateComponents(day: 26, hour: 20, minute: 30))
     }
 
+    @Test func repeatPrefillCopiesMovementButNotCategoryAsTitle() {
+        let wallet = Wallet(name: "Carta", icon: "creditcard")
+        let described = Transaction(type: .expense, amount: Decimal(string: "1.30")!, category: "Bar", title: "Caffè", wallet: wallet)
+        let undescribed = Transaction(type: .expense, amount: 50, category: "Benzina", title: "Benzina", wallet: wallet)
+
+        let first = QuickAddPrefill(repeating: described)
+        let second = QuickAddPrefill(repeating: undescribed)
+
+        #expect(first.amount == Decimal(string: "1.30")!)
+        #expect(first.category == "Bar")
+        #expect(first.title == "Caffè")
+        #expect(first.wallet === wallet)
+        // Il titolo uguale alla categoria era un segnaposto: non diventa una descrizione.
+        #expect(second.title.isEmpty)
+    }
+
     @Test func relationshipRemainingAmountNeverBecomesNegative() {
         let relationship = Relationship(personName: "Luca", amount: 100, type: .debt, paidAmount: 40)
         #expect(relationship.remainingAmount == 60)

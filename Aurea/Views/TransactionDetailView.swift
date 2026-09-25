@@ -10,6 +10,7 @@ struct TransactionDetailView: View {
 
     @State private var showingDeleteConfirmation = false
     @State private var showingEdit = false
+    @State private var showingRepeat = false
 
     private var isTransfer: Bool {
         transaction.isTransfer
@@ -50,6 +51,9 @@ struct TransactionDetailView: View {
                         Button { showingEdit = true } label: {
                             Label("Modifica movimento", systemImage: "pencil")
                         }
+                        Button { showingRepeat = true } label: {
+                            Label("Registra di nuovo", systemImage: "arrow.clockwise")
+                        }
                     }
 
                     Section {
@@ -66,6 +70,9 @@ struct TransactionDetailView: View {
             }
             .sheet(isPresented: $showingEdit) {
                 EditTransactionView(transaction: transaction)
+            }
+            .sheet(isPresented: $showingRepeat) {
+                QuickAddView(prefill: QuickAddPrefill(repeating: transaction))
             }
             .confirmationDialog(isTransfer ? "Eliminare l’intero trasferimento?" : "Eliminare questo movimento?", isPresented: $showingDeleteConfirmation, titleVisibility: .visible) {
                 Button("Elimina", role: .destructive) { deleteMovement() }

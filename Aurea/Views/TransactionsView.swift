@@ -15,6 +15,7 @@ struct TransactionsView: View {
     @State private var filter = TransactionFilter()
     @State private var selectedTransaction: Transaction?
     @State private var pendingDeletion: Transaction?
+    @State private var repeatingTransaction: Transaction?
     @State private var exportItem: ExportItem?
     @State private var exportError: String?
 
@@ -141,6 +142,12 @@ struct TransactionsView: View {
                                     .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
+                                .swipeActions(edge: .leading) {
+                                    if !transaction.isTransfer {
+                                        Button("Ripeti", systemImage: "arrow.clockwise") { repeatingTransaction = transaction }
+                                            .tint(.accentColor)
+                                    }
+                                }
                                 .swipeActions(edge: .trailing) {
                                     if transaction.canBeDeleted {
                                         Button("Elimina", systemImage: "trash") { pendingDeletion = transaction }
@@ -167,6 +174,9 @@ struct TransactionsView: View {
                 TransactionDetailView(transaction: transaction)
             }
             .sheet(item: $exportItem) { item in ActivityView(activityItems: [item.url]) }
+            .sheet(item: $repeatingTransaction) { transaction in
+                QuickAddView(prefill: QuickAddPrefill(repeating: transaction))
+            }
             .alert("Esportazione non riuscita", isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
                 Button("OK", role: .cancel) { }
             } message: {

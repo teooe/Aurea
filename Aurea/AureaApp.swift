@@ -10,6 +10,7 @@ import SwiftData
 
 @main
 struct AureaApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     var sharedModelContainer: ModelContainer { AureaStore.container }
 
     var body: some Scene {

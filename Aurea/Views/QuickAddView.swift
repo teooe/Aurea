@@ -3,6 +3,24 @@ import SwiftData
 import SwiftUI
 import UIKit
 
+/// Valori iniziali del modulo, per "Ripeti" su un movimento già registrato.
+struct QuickAddPrefill {
+    var type: TransactionType
+    var amount: Decimal
+    var category: String
+    var title: String
+    var wallet: Wallet?
+
+    init(repeating transaction: Transaction) {
+        type = transaction.type
+        amount = transaction.amount
+        category = transaction.category
+        // Se il titolo era solo la categoria (descrizione vuota), non va ripetuto come descrizione.
+        title = transaction.title == transaction.category ? "" : transaction.title
+        wallet = transaction.wallet
+    }
+}
+
 struct QuickAddView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -24,6 +42,16 @@ struct QuickAddView: View {
     @State private var photoItem: PhotosPickerItem?
     @State private var isReadingReceipt = false
     @State private var receiptNote: String?
+
+    /// Con un precompilato la data resta "adesso": ripetere significa registrare di nuovo oggi.
+    init(prefill: QuickAddPrefill? = nil) {
+        guard let prefill else { return }
+        _type = State(initialValue: prefill.type)
+        _amount = State(initialValue: prefill.amount.formatted(.number.precision(.fractionLength(2)).grouping(.never).locale(Locale(identifier: "it_IT"))))
+        _category = State(initialValue: prefill.category)
+        _title = State(initialValue: prefill.title)
+        _selectedWallet = State(initialValue: prefill.wallet?.isArchived == false ? prefill.wallet : nil)
+    }
 
     private var activeWallets: [Wallet] { wallets.filter { !$0.isArchived } }
 
