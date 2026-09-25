@@ -397,6 +397,57 @@ struct AureaTests {
         #expect(kinds.first == .alert)
     }
 
+    @Test func receiptParserReadsTypicalItalianReceipt() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 25, hour: 18))!
+        let lines = [
+            "DOCUMENTO COMMERCIALE",
+            "di vendita o prestazione",
+            "SUPERMERCATO ROSSI SRL",
+            "Via Roma 12 - Bologna",
+            "P.IVA 01234567890",
+            "PANE INTEGRALE 2,40",
+            "LATTE 1,29",
+            "SUBTOTALE 13,69",
+            "SCONTO -1,19",
+            "TOTALE COMPLESSIVO 12,50",
+            "DI CUI IVA 1,14",
+            "PAGAMENTO CONTANTE 20,00",
+            "RESTO 7,50",
+            "24-09-2026 18:42 DOC.N. 0042-0017",
+        ]
+
+        let result = ReceiptParser.parse(lines, now: now, calendar: calendar)
+
+        #expect(result.amount == Decimal(string: "12.50")!)
+        #expect(result.merchant == "Supermercato Rossi Srl")
+        #expect(result.date.map { calendar.dateComponents([.year, .month, .day], from: $0) } == DateComponents(year: 2026, month: 9, day: 24))
+    }
+
+    @Test func receiptParserHandlesSplitLabelAndFallbacks() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 25))!
+
+        // L'OCR separa l'etichetta dall'importo.
+        #expect(ReceiptParser.parse(["BAR CENTRALE", "TOTALE", "€ 4.80"], now: now, calendar: calendar).amount == Decimal(string: "4.80")!)
+        // Nessuna etichetta: l'importo più alto, ignorando contanti e resto.
+        #expect(ReceiptParser.total(in: ["Caffè 1,20", "Brioche 1,50", "3,70", "CONTANTI 10,00"]) == Decimal(string: "3.70")!)
+        // Migliaia con il punto.
+        #expect(ReceiptParser.amounts(in: "TOTALE 1.234,56") == [Decimal(string: "1234.56")!])
+        // Una data con i punti non è un importo.
+        #expect(ReceiptParser.amounts(in: "25.09.2026 18:42").isEmpty)
+    }
+
+    @Test func receiptParserRejectsImpossibleOrFutureDates() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 25))!
+
+        #expect(ReceiptParser.date(in: ["31/02/2026"], now: now, calendar: calendar) == nil)
+        #expect(ReceiptParser.date(in: ["10/12/2026"], now: now, calendar: calendar) == nil)
+        let short = ReceiptParser.date(in: ["Data 03/09/26"], now: now, calendar: calendar)
+        #expect(short.map { calendar.component(.year, from: $0) } == 2026)
+    }
+
     @Test func relationshipRemainingAmountNeverBecomesNegative() {
         let relationship = Relationship(personName: "Luca", amount: 100, type: .debt, paidAmount: 40)
         #expect(relationship.remainingAmount == 60)

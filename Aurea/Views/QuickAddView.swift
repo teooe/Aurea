@@ -1,5 +1,6 @@
-import SwiftUI
+import PhotosUI
 import SwiftData
+import SwiftUI
 
 struct QuickAddView: View {
     @Environment(\.modelContext) private var modelContext
@@ -17,6 +18,11 @@ struct QuickAddView: View {
     @State private var selectedWallet: Wallet?
     @State private var destinationWallet: Wallet?
     @FocusState private var amountFocused: Bool
+    @State private var showingScanner = false
+    @State private var showingPhotoPicker = false
+    @State private var photoItem: PhotosPickerItem?
+    @State private var isReadingReceipt = false
+    @State private var receiptNote: String?
 
     private var activeWallets: [Wallet] { wallets.filter { !$0.isArchived } }
 
@@ -80,6 +86,15 @@ struct QuickAddView: View {
                             .accessibilityLabel("Importo")
                     }
                     .padding(.vertical, 4)
+
+                    if type == .expense {
+                        receiptButton
+                        if let receiptNote {
+                            Text(receiptNote)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
 
                 if type != .transfer {
@@ -167,6 +182,92 @@ struct QuickAddView: View {
                 if destinationWallet == nil { destinationWallet = activeWallets.first { $0 !== selectedWallet } }
                 amountFocused = true
             }
+            .fullScreenCover(isPresented: $showingScanner) {
+                DocumentScannerView { images in
+                    showingScanner = false
+                    readReceipt(images)
+                } onCancel: {
+                    showingScanner = false
+                }
+                .ignoresSafeArea()
+            }
+            .photosPicker(isPresented: $showingPhotoPicker, selection: $photoItem, matching: .images)
+            .onChange(of: photoItem) { _, item in
+                guard let item else { return }
+                photoItem = nil
+                Task {
+                    guard let data = try? await item.loadTransferable(type: Data.self),
+                          let image = UIImage(data: data) else {
+                        receiptNote = "Non riesco ad aprire questa foto."
+                        return
+                    }
+                    readReceipt([image])
+                }
+            }
+        }
+    }
+
+    private var receiptButton: some View {
+        Menu {
+            if DocumentScannerView.isSupported {
+                Button("Scatta foto", systemImage: "camera") { showingScanner = true }
+            }
+            Button("Scegli dalla libreria", systemImage: "photo.on.rectangle") { showingPhotoPicker = true }
+        } label: {
+            HStack {
+                Label(isReadingReceipt ? "Lettura dello scontrino…" : "Leggi da scontrino", systemImage: "doc.text.viewfinder")
+                if isReadingReceipt {
+                    Spacer()
+                    ProgressView()
+                }
+            }
+        }
+        .disabled(isReadingReceipt)
+    }
+
+    /// Legge lo scontrino e precompila importo, data e descrizione. Non salva: l'utente controlla prima.
+    private func readReceipt(_ images: [UIImage]) {
+        guard !images.isEmpty else { return }
+        isReadingReceipt = true
+        receiptNote = nil
+        amountFocused = false
+        Task {
+            defer { isReadingReceipt = false }
+            do {
+                let lines = try await ReceiptScanner.lines(from: images)
+                apply(ReceiptParser.parse(lines))
+            } catch {
+                receiptNote = "Non sono riuscito a leggere lo scontrino. Inserisci i dati a mano."
+            }
+        }
+    }
+
+    private func apply(_ result: ReceiptParser.Result) {
+        var found: [String] = []
+        if let value = result.amount {
+            // Senza separatore delle migliaia: parsedAmount sostituisce solo la virgola.
+            amount = value.formatted(.number.precision(.fractionLength(2)).grouping(.never).locale(Locale(identifier: "it_IT")))
+            found.append("importo")
+        }
+        if let receiptDate = result.date {
+            // Lo scontrino dà il giorno; l'ora resta quella scelta nel modulo.
+            let calendar = Calendar.current
+            let time = calendar.dateComponents([.hour, .minute], from: date)
+            date = calendar.date(bySettingHour: time.hour ?? 12, minute: time.minute ?? 0, second: 0, of: receiptDate) ?? receiptDate
+            found.append("data")
+        }
+        if let merchant = result.merchant, trimmedTitle.isEmpty {
+            title = merchant
+            found.append("negozio")
+        }
+
+        if result.amount == nil {
+            receiptNote = found.isEmpty
+                ? "Non ho trovato dati utili: inseriscili a mano."
+                : "Letti \(found.joined(separator: " e ")), ma non il totale: inseriscilo a mano."
+            amountFocused = true
+        } else {
+            receiptNote = "Letti \(found.joined(separator: ", ")) dallo scontrino: controlla prima di salvare."
         }
     }
 
