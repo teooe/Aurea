@@ -41,6 +41,12 @@ struct ContentView: View {
                     .tabItem { Label("Analisi", systemImage: "sparkles") }
             }
             .opacity(showingBrandSplash && !isUITesting ? 0 : 1)
+            .overlay(alignment: .bottom) {
+                // Sopra la barra dei tab: resta visibile anche dopo la chiusura del foglio "Nuovo movimento".
+                UndoBannerView(banner: UndoBanner.shared)
+                    .padding(.bottom, 64)
+                    .animation(.spring(duration: 0.35), value: UndoBanner.shared.notice?.id)
+            }
 
             if showingBrandSplash && !isUITesting {
                 BrandSplashView()

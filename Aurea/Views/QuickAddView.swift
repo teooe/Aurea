@@ -224,11 +224,17 @@ struct QuickAddView: View {
             let incoming = Transaction(type: .income, amount: destinationAmount, date: date, category: Transaction.transferCategory, title: "\(cleanTitle) ← \(wallet.name)", wallet: destinationWallet, transferGroupID: groupID)
             modelContext.insert(outgoing)
             modelContext.insert(incoming)
+            let sent = decimalAmount.formatted(.currency(code: wallet.currencyCode))
+            UndoBanner.shared.post([outgoing, incoming], message: "Trasferimento registrato · \(sent) · \(wallet.name) → \(destinationWallet.name)")
         } else {
             // Senza descrizione il movimento prende il nome della categoria.
             let resolvedCategory = CategoryService.resolve(trimmedCategory, type: type, in: modelContext)
             let cleanTitle = trimmedTitle.isEmpty ? resolvedCategory : trimmedTitle
-            modelContext.insert(Transaction(type: type, amount: decimalAmount, date: date, category: resolvedCategory, title: cleanTitle, wallet: wallet))
+            let transaction = Transaction(type: type, amount: decimalAmount, date: date, category: resolvedCategory, title: cleanTitle, wallet: wallet)
+            modelContext.insert(transaction)
+            let kind = type == .income ? "Entrata registrata" : "Spesa registrata"
+            let value = decimalAmount.formatted(.currency(code: wallet.currencyCode))
+            UndoBanner.shared.post([transaction], message: "\(kind) · \(value) · \(resolvedCategory)")
         }
 
         dismiss()
