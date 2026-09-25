@@ -23,9 +23,9 @@ struct FinanceCenterView: View {
 
                 Section("Analisi") {
                     NavigationLink {
-                        FinanceStatisticsView()
+                        ReportsView()
                     } label: {
-                        Label("Statistiche", systemImage: "chart.bar.xaxis")
+                        Label("Report", systemImage: "chart.bar.xaxis")
                     }
                 }
 
@@ -226,60 +226,6 @@ private struct AddBudgetView: View {
                 }
             }
         }
-    }
-}
-
-private struct FinanceStatisticsView: View {
-    @Query(sort: \Transaction.date, order: .reverse) private var transactions: [Transaction]
-
-    private var thisMonth: [Transaction] {
-        transactions.filter { Calendar.current.isDate($0.date, equalTo: .now, toGranularity: .month) }
-    }
-
-    private var lastMonth: [Transaction] {
-        guard let date = Calendar.current.date(byAdding: .month, value: -1, to: .now) else { return [] }
-        return transactions.filter { Calendar.current.isDate($0.date, equalTo: date, toGranularity: .month) }
-    }
-
-    private var categoryTotals: [(String, Decimal)] {
-        let expenses = thisMonth.filter { $0.type == .expense && !$0.isTransfer }
-        let grouped = Dictionary(grouping: expenses, by: \.category)
-        return grouped.map { ($0.key, $0.value.reduce(0) { $0 + FinancialEngine.amountInEUR(for: $1) }) }.sorted { $0.1 > $1.1 }
-    }
-
-    var body: some View {
-        List {
-            Section("Questo mese") {
-                metric("Entrate", FinancialEngine.totalIncome(from: thisMonth))
-                metric("Spese", FinancialEngine.totalExpenses(from: thisMonth))
-                metric("Flusso netto", FinancialEngine.cashFlow(from: thisMonth))
-            }
-
-            Section("Confronto con il mese scorso") {
-                metric("Spese mese scorso", FinancialEngine.totalExpenses(from: lastMonth))
-                let delta = FinancialEngine.totalExpenses(from: thisMonth) - FinancialEngine.totalExpenses(from: lastMonth)
-                LabeledContent("Differenza spese", value: delta.formatted(.currency(code: "EUR")))
-            }
-
-            Section("Spese per categoria") {
-                if categoryTotals.isEmpty {
-                    Text("Nessuna spesa questo mese").foregroundStyle(.secondary)
-                } else {
-                    ForEach(Array(categoryTotals.enumerated()), id: \.offset) { _, item in
-                        HStack {
-                            Text(item.0)
-                            Spacer()
-                            Text(item.1, format: .currency(code: "EUR"))
-                        }
-                    }
-                }
-            }
-        }
-        .navigationTitle("Statistiche")
-    }
-
-    private func metric(_ title: String, _ value: Decimal) -> some View {
-        LabeledContent(title, value: value.formatted(.currency(code: "EUR")))
     }
 }
 

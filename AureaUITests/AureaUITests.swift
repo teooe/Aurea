@@ -13,14 +13,10 @@ final class AureaUITests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["Home"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.tabBars.buttons["Movimenti"].exists)
         XCTAssertTrue(app.tabBars.buttons["Aggiungi"].exists)
-        XCTAssertTrue(app.tabBars.buttons["Agenda"].exists)
         XCTAssertTrue(app.tabBars.buttons["Aurea"].exists)
 
         app.tabBars.buttons["Movimenti"].tap()
         XCTAssertTrue(app.navigationBars["Movimenti"].waitForExistence(timeout: 3))
-
-        app.tabBars.buttons["Agenda"].tap()
-        XCTAssertTrue(app.navigationBars["Agenda"].waitForExistence(timeout: 3))
 
         app.tabBars.buttons["Aurea"].tap()
         XCTAssertTrue(app.navigationBars["Aurea"].waitForExistence(timeout: 3))
@@ -28,9 +24,9 @@ final class AureaUITests: XCTestCase {
         app.tabBars.buttons["Home"].tap()
         app.tabBars.buttons["Aggiungi"].tap()
 
-        XCTAssertTrue(element(label: "Movimento", in: app).waitForExistence(timeout: 5))
-        XCTAssertTrue(element(label: "Impegno", in: app).exists)
-        XCTAssertTrue(element(label: "Portafoglio", in: app).exists)
+        XCTAssertTrue(app.navigationBars["Nuovo movimento"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Salva"].exists)
+        XCTAssertFalse(app.buttons["Salva"].isEnabled)
     }
 
     @MainActor

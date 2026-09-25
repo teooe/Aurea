@@ -15,6 +15,7 @@ struct HomeDashboardView: View {
     @State private var showingAddGoal = false
     @State private var showingTransactions = false
     @State private var showingFinanceCenter = false
+    @State private var showingReports = false
     @State private var showingAgenda = false
     @State private var selectedRelationship: Relationship?
     @State private var selectedGoal: Goal?
@@ -68,6 +69,7 @@ struct HomeDashboardView: View {
         .sheet(isPresented: $showingAddGoal) { AddGoalView() }
         .sheet(isPresented: $showingTransactions) { TransactionsView() }
         .sheet(isPresented: $showingFinanceCenter) { FinanceCenterView() }
+        .sheet(isPresented: $showingReports) { NavigationStack { ReportsView(showsDoneButton: true) } }
         .sheet(isPresented: $showingAgenda) { AgendaView() }
         .sheet(item: $selectedRelationship) { RelationshipDetailView(relationship: $0) }
         .sheet(item: $selectedGoal) { GoalDetailView(goal: $0) }
@@ -149,7 +151,7 @@ struct HomeDashboardView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Button("Dettagli") { showingFinanceCenter = true }.font(.caption.weight(.semibold))
+                    Button("Report") { showingReports = true }.font(.caption.weight(.semibold))
                 }
             }
         }

@@ -74,7 +74,7 @@ struct ContentView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { refreshData() }
         }
-        .sheet(isPresented: $showingQuickAdd) { GlobalQuickAddView() }
+        .sheet(isPresented: $showingQuickAdd) { QuickAddView() }
         .fullScreenCover(isPresented: Binding(
             get: { !onboardingCompleted && !isUITesting && !showingBrandSplash },
             set: { if !$0 { onboardingCompleted = true } }

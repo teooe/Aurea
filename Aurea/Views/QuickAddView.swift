@@ -16,7 +16,7 @@ struct QuickAddView: View {
     @State private var category = ""
     @State private var selectedWallet: Wallet?
     @State private var destinationWallet: Wallet?
-    @State private var showingConfirmation = false
+    @FocusState private var amountFocused: Bool
 
     private let fallbackExpenseCategories = ["Alimentari", "Trasporti", "Casa", "Svago", "Salute", "Shopping", "Altro"]
     private let fallbackIncomeCategories = ["Stipendio", "Regalo", "Rimborso", "Vendita", "Altro"]
@@ -43,10 +43,19 @@ struct QuickAddView: View {
         return result
     }
 
+    /// Categorie usate di recente per prime, poi le altre, senza duplicati.
+    private var categoryChips: [String] {
+        var seen = Set<String>()
+        return (recentCategories + suggestedCategories).filter { seen.insert($0.lowercased()).inserted }
+    }
+
+    private var trimmedTitle: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var trimmedCategory: String { category.trimmingCharacters(in: .whitespacesAndNewlines) }
+
     var body: some View {
         NavigationStack {
             Form {
-                Section("Tipo") {
+                Section {
                     Picker("Tipo", selection: $type) {
                         Text("Spesa").tag(TransactionType.expense)
                         Text("Entrata").tag(TransactionType.income)
@@ -63,44 +72,37 @@ struct QuickAddView: View {
                             category = ""
                         }
                     }
+
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(currencySymbol)
+                            .font(.title.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        TextField("0,00", text: $amount)
+                            .font(.system(size: 40, weight: .bold, design: .rounded))
+                            .keyboardType(.decimalPad)
+                            .focused($amountFocused)
+                            .accessibilityLabel("Importo")
+                    }
+                    .padding(.vertical, 4)
                 }
 
-                Section("Movimento") {
-                    TextField("Titolo", text: $title)
-                    TextField("Importo", text: $amount).keyboardType(.decimalPad)
-                    DatePicker("Data", selection: $date)
+                if type != .transfer {
+                    Section("Categoria") {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(categoryChips, id: \.self) { chip in
+                                    categoryChip(chip)
+                                }
+                            }
+                            .padding(.vertical, 2)
+                        }
 
-                    if type != .transfer {
-                        TextField("Categoria", text: $category)
+                        TextField("Altra categoria", text: $category)
 
                         if Transaction.isReservedCategory(category) {
                             Text("“\(Transaction.transferCategory)” è riservata ai trasferimenti: scegli un'altra categoria.")
                                 .font(.caption)
                                 .foregroundStyle(.red)
-                        }
-
-                        if !recentCategories.isEmpty {
-                            Text("Usate di recente").font(.caption).foregroundStyle(.secondary)
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 8) {
-                                    ForEach(recentCategories, id: \.self) { suggestion in
-                                        Button(suggestion) { category = suggestion }
-                                            .buttonStyle(.borderedProminent)
-                                            .controlSize(.small)
-                                    }
-                                }
-                            }
-                        }
-
-                        Text("Categorie").font(.caption).foregroundStyle(.secondary)
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(suggestedCategories, id: \.self) { suggestion in
-                                    Button(suggestion) { category = suggestion }
-                                        .buttonStyle(.bordered)
-                                        .controlSize(.small)
-                                }
-                            }
                         }
                     }
                 }
@@ -135,13 +137,17 @@ struct QuickAddView: View {
                             }
                         }
                     }
-                } else {
-                    Section("Portafoglio") {
+                }
+
+                Section("Dettagli") {
+                    TextField("Descrizione (facoltativa)", text: $title)
+                    DatePicker("Data", selection: $date)
+
+                    if type != .transfer {
                         if activeWallets.isEmpty {
                             Text("Nessun portafoglio disponibile").foregroundStyle(.secondary)
                         } else {
                             Picker("Portafoglio", selection: $selectedWallet) {
-                                Text("Seleziona").tag(nil as Wallet?)
                                 ForEach(activeWallets) { wallet in
                                     Label(wallet.name, systemImage: wallet.icon).tag(wallet as Wallet?)
                                 }
@@ -149,27 +155,47 @@ struct QuickAddView: View {
                         }
                     }
                 }
-
-                Section {
-                    Button("Continua") { showingConfirmation = true }
-                        .disabled(!canSave)
-                }
             }
             .navigationTitle("Nuovo movimento")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Annulla") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Salva") { saveTransaction() }
+                        .fontWeight(.semibold)
+                        .disabled(!canSave)
+                }
             }
             .onAppear {
                 if selectedWallet == nil { selectedWallet = activeWallets.first }
                 if destinationWallet == nil { destinationWallet = activeWallets.first { $0 !== selectedWallet } }
-            }
-            .confirmationDialog("Conferma movimento", isPresented: $showingConfirmation, titleVisibility: .visible) {
-                Button("Salva") { saveTransaction() }
-                Button("Annulla", role: .cancel) { }
-            } message: {
-                Text(confirmationText)
+                amountFocused = true
             }
         }
+    }
+
+    private func categoryChip(_ name: String) -> some View {
+        let isSelected = trimmedCategory.caseInsensitiveCompare(name) == .orderedSame
+        return Button {
+            category = isSelected ? "" : name
+        } label: {
+            Text(name)
+                .font(.subheadline.weight(isSelected ? .semibold : .regular))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(isSelected ? Color.accentColor : Color.secondary.opacity(0.15), in: Capsule())
+                .foregroundStyle(isSelected ? Color.white : Color.primary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private var currencySymbol: String {
+        let code = selectedWallet?.currencyCode ?? "EUR"
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = code
+        return formatter.currencySymbol ?? code
     }
 
     private var parsedAmount: Decimal? { Decimal(string: amount.replacingOccurrences(of: ",", with: ".")) }
@@ -183,36 +209,29 @@ struct QuickAddView: View {
     }
 
     private var canSave: Bool {
-        let baseValid = !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (parsedAmount ?? 0) > 0 && selectedWallet != nil
+        let baseValid = (parsedAmount ?? 0) > 0 && selectedWallet != nil
         if type == .transfer {
             return baseValid && activeWallets.count >= 2 && destinationWallet != nil && destinationWallet !== selectedWallet
         }
-        return baseValid && !category.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !Transaction.isReservedCategory(category)
-    }
-
-    private var confirmationText: String {
-        let amountText = parsedAmount?.formatted(.currency(code: selectedWallet?.currencyCode ?? "EUR")) ?? ""
-        if type == .transfer {
-            let destinationText = convertedDestinationAmount?.formatted(.currency(code: destinationWallet?.currencyCode ?? "EUR")) ?? ""
-            return "Trasferimento: \(title) • \(amountText) da \(selectedWallet?.name ?? "") • \(destinationText) a \(destinationWallet?.name ?? "")"
-        }
-        return "\(type == .expense ? "Spesa" : "Entrata"): \(title) • \(amountText) • \(category)"
+        return baseValid && !trimmedCategory.isEmpty && !Transaction.isReservedCategory(category)
     }
 
     private func saveTransaction() {
-        guard let decimalAmount = parsedAmount, let wallet = selectedWallet else { return }
-        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard canSave, let decimalAmount = parsedAmount, let wallet = selectedWallet else { return }
 
         if type == .transfer {
             guard let destinationWallet, destinationWallet !== wallet,
                   let destinationAmount = convertedDestinationAmount else { return }
             let groupID = UUID()
+            let cleanTitle = trimmedTitle.isEmpty ? Transaction.transferCategory : trimmedTitle
             let outgoing = Transaction(type: .expense, amount: decimalAmount, date: date, category: Transaction.transferCategory, title: "\(cleanTitle) → \(destinationWallet.name)", wallet: wallet, transferGroupID: groupID)
             let incoming = Transaction(type: .income, amount: destinationAmount, date: date, category: Transaction.transferCategory, title: "\(cleanTitle) ← \(wallet.name)", wallet: destinationWallet, transferGroupID: groupID)
             modelContext.insert(outgoing)
             modelContext.insert(incoming)
         } else {
-            modelContext.insert(Transaction(type: type, amount: decimalAmount, date: date, category: category.trimmingCharacters(in: .whitespacesAndNewlines), title: cleanTitle, wallet: wallet))
+            // Senza descrizione il movimento prende il nome della categoria.
+            let cleanTitle = trimmedTitle.isEmpty ? trimmedCategory : trimmedTitle
+            modelContext.insert(Transaction(type: type, amount: decimalAmount, date: date, category: trimmedCategory, title: cleanTitle, wallet: wallet))
         }
 
         dismiss()
