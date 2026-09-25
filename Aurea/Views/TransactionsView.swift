@@ -15,6 +15,8 @@ struct TransactionsView: View {
     @State private var filter = TransactionFilter()
     @State private var selectedTransaction: Transaction?
     @State private var pendingDeletion: Transaction?
+    @State private var exportItem: ExportItem?
+    @State private var exportError: String?
 
     private var filteredTransactions: [Transaction] {
         filter.apply(to: transactions)
@@ -98,10 +100,9 @@ struct TransactionsView: View {
 
                 if groupedTransactions.isEmpty {
                     Section {
-                        let isFiltering = !filter.searchText.isEmpty || filter.activeRefinementCount > 0
                         ContentUnavailableView(
-                            isFiltering ? "Nessun risultato" : "Nessun movimento",
-                            systemImage: isFiltering ? "magnifyingglass" : "tray"
+                            isFiltered ? "Nessun risultato" : "Nessun movimento",
+                            systemImage: isFiltered ? "magnifyingglass" : "tray"
                         )
                     }
                 } else {
@@ -165,6 +166,12 @@ struct TransactionsView: View {
             .sheet(item: $selectedTransaction) { transaction in
                 TransactionDetailView(transaction: transaction)
             }
+            .sheet(item: $exportItem) { item in ActivityView(activityItems: [item.url]) }
+            .alert("Esportazione non riuscita", isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(exportError ?? "")
+            }
             .onChange(of: filter.kind) { _, _ in
                 // Una categoria di spesa non ha senso filtrando solo le entrate, e viceversa.
                 if let category = filter.category,
@@ -215,12 +222,31 @@ struct TransactionsView: View {
                     filter.walletID = nil
                 }
             }
+
+            Divider()
+
+            Button {
+                exportFilteredCSV()
+            } label: {
+                Label(isFiltered ? "Esporta risultati in CSV" : "Esporta tutto in CSV", systemImage: "tablecells")
+            }
+            .disabled(filteredTransactions.isEmpty)
         } label: {
             Image(systemName: filter.activeRefinementCount > 0
                   ? "line.3.horizontal.decrease.circle.fill"
                   : "line.3.horizontal.decrease.circle")
         }
         .accessibilityLabel("Filtri")
+    }
+
+    private var isFiltered: Bool {
+        filter.kind != .all || filter.activeRefinementCount > 0 || !filter.searchText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// Esporta esattamente ciò che la lista mostra, filtri e ricerca compresi.
+    private func exportFilteredCSV() {
+        do { exportItem = ExportItem(url: try CSVExporter.writeFile(for: filteredTransactions)) }
+        catch { exportError = error.localizedDescription }
     }
 
     private func activeFilterChip(_ title: String, onRemove: @escaping () -> Void) -> some View {

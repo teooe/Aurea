@@ -255,6 +255,37 @@ struct AureaTests {
         #expect(normal.canBeDeleted)
     }
 
+    @Test func csvUsesItalianSpreadsheetFormat() {
+        let rome = TimeZone(identifier: "Europe/Rome")!
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = rome
+        let date = calendar.date(from: DateComponents(year: 2026, month: 9, day: 5, hour: 8, minute: 30))!
+        let usd = Wallet(name: "Carta USD", icon: "creditcard", currencyCode: "USD", exchangeRateToEUR: 0.9)
+        let eur = Wallet(name: "Conto", icon: "wallet.pass")
+        let items = [
+            Transaction(type: .expense, amount: Decimal(string: "12.5")!, date: date, category: "Cibo", title: "Pizza; birra", wallet: eur),
+            Transaction(type: .income, amount: Decimal(string: "10.01")!, date: date.addingTimeInterval(60), category: "Rimborso", title: "Rimborso \"cena\"", wallet: usd),
+            Transaction(type: .expense, amount: 50, date: date.addingTimeInterval(120), category: Transaction.transferCategory, title: "Giroconto", wallet: eur, transferGroupID: UUID()),
+        ]
+
+        let csv = CSVExporter.csv(for: items, timeZone: rome)
+        let lines = csv.dropFirst().components(separatedBy: "\r\n").filter { !$0.isEmpty }
+
+        #expect(csv.hasPrefix("\u{FEFF}"))
+        #expect(lines[0] == "Data;Ora;Tipo;Titolo;Categoria;Importo;Valuta;Importo EUR;Portafoglio")
+        #expect(lines[1] == "05/09/2026;08:30;Spesa;\"Pizza; birra\";Cibo;-12,5;EUR;-12,5;Conto")
+        #expect(lines[2] == "05/09/2026;08:31;Entrata;\"Rimborso \"\"cena\"\"\";Rimborso;10,01;USD;9,01;Carta USD")
+        #expect(lines[3].hasPrefix("05/09/2026;08:32;Trasferimento;Giroconto;"))
+    }
+
+    @Test func csvNumberFormatting() {
+        #expect(CSVExporter.number(Decimal(string: "1234.5")!) == "1234,5")
+        #expect(CSVExporter.number(Decimal(string: "9.009")!, scale: 2) == "9,01")
+        #expect(CSVExporter.number(-3) == "-3")
+        #expect(CSVExporter.escape("semplice") == "semplice")
+        #expect(CSVExporter.escape("a\nb") == "\"a\nb\"")
+    }
+
     @Test func relationshipRemainingAmountNeverBecomesNegative() {
         let relationship = Relationship(personName: "Luca", amount: 100, type: .debt, paidAmount: 40)
         #expect(relationship.remainingAmount == 60)

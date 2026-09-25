@@ -94,7 +94,7 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Button { exportText(makeCSV(), filename: "Aurea-Movimenti.csv") } label: {
+                    Button { exportCSV() } label: {
                         Label("Esporta movimenti CSV", systemImage: "tablecells")
                     }
                     Button { createFullBackup() } label: {
@@ -168,6 +168,11 @@ struct SettingsView: View {
         catch { statusMessage = "Esportazione non riuscita: \(error.localizedDescription)" }
     }
 
+    private func exportCSV() {
+        do { exportItem = ExportItem(url: try CSVExporter.writeFile(for: transactions)) }
+        catch { statusMessage = "Esportazione non riuscita: \(error.localizedDescription)" }
+    }
+
     private func createFullBackup() {
         do {
             let payload = try BackupRestoreService.makePayload(context: modelContext)
@@ -207,26 +212,6 @@ struct SettingsView: View {
         if invalidRelationships > 0 { issues.append("\(invalidRelationships) debiti/crediti con importo non valido") }
         statusMessage = issues.isEmpty ? "Controllo completato: non risultano problemi evidenti nei dati." : "Da controllare: " + issues.joined(separator: "; ") + "."
     }
-
-    private func makeCSV() -> String {
-        var rows = ["Data,Tipo,Titolo,Categoria,Importo,Valuta,Portafoglio"]
-        let formatter = ISO8601DateFormatter()
-        for transaction in transactions.sorted(by: { $0.date < $1.date }) {
-            let type: String
-            switch transaction.type { case .expense: type = "Spesa"; case .income: type = "Entrata"; case .transfer: type = "Trasferimento" }
-            let values = [formatter.string(from: transaction.date), type, transaction.title, transaction.category, NSDecimalNumber(decimal: transaction.amount).stringValue, transaction.wallet?.currencyCode ?? "EUR", transaction.wallet?.name ?? ""].map(csvEscape)
-            rows.append(values.joined(separator: ","))
-        }
-        return rows.joined(separator: "\n")
-    }
-
-    private func csvEscape(_ value: String) -> String { "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\"" }
 }
 
-private struct ExportItem: Identifiable { let id = UUID(); let url: URL }
 
-private struct ActivityView: UIViewControllerRepresentable {
-    let activityItems: [Any]
-    func makeUIViewController(context: Context) -> UIActivityViewController { UIActivityViewController(activityItems: activityItems, applicationActivities: nil) }
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-}
