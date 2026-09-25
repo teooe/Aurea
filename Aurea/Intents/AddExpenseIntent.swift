@@ -3,7 +3,7 @@ import Foundation
 import SwiftData
 
 /// "Registra una spesa su Aurea": Siri chiede importo e categoria, poi salva senza aprire l'app.
-nonisolated struct AddExpenseIntent: AppIntent {
+struct AddExpenseIntent: AppIntent {
     static let title: LocalizedStringResource = "Registra spesa"
     static let description = IntentDescription("Registra una spesa in Aurea senza aprire l'app.")
     /// Con il telefono bloccato Siri chiede prima di sbloccarlo: nessuno può registrare spese al posto tuo.

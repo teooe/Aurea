@@ -1,9 +1,9 @@
 name: Build e test
 
 on:
+  # I branch di questo repository sono già coperti dal push: niente doppione sulle PR.
   push:
     branches: [main, "claude/**"]
-  pull_request:
   workflow_dispatch:
 
 concurrency:
