@@ -17,6 +17,8 @@ struct SettingsView: View {
     @AppStorage("aurea.notifications.relationships") private var relationshipNotifications = true
     @AppStorage("aurea.notifications.recurring") private var recurringNotifications = true
     @AppStorage("aurea.notifications.budgets") private var budgetNotifications = true
+    @AppStorage("aurea.notifications.dailyReminder") private var dailyReminder = false
+    @AppStorage("aurea.notifications.dailyReminderMinutes") private var dailyReminderMinutes = 21 * 60
     @AppStorage("aurea.agenda.showCompleted") private var showCompletedAgenda = true
     @AppStorage("aurea.agenda.defaultReminder") private var defaultReminder = 0
     @AppStorage("aurea.appearance") private var appearanceRaw = AppAppearance.system.rawValue
@@ -72,11 +74,15 @@ struct SettingsView: View {
                     Toggle("Debiti e crediti", isOn: $relationshipNotifications)
                     Toggle("Movimenti ricorrenti", isOn: $recurringNotifications)
                     Toggle("Avvisi budget", isOn: $budgetNotifications)
+                    Toggle("Promemoria giornaliero", isOn: $dailyReminder)
+                    if dailyReminder {
+                        DatePicker("Orario", selection: dailyReminderTime, displayedComponents: .hourAndMinute)
+                    }
                     Button { refreshReminders(); statusMessage = "Promemoria aggiornati." } label: {
                         Label("Aggiorna promemoria", systemImage: "bell.badge")
                     }
                 } header: { Text("Notifiche") }
-                footer: { Text("Le scadenze di debiti/crediti e ricorrenti vengono ricordate il giorno prima. I budget avvisano all'80% e quando vengono superati.") }
+                footer: { Text("Le scadenze di debiti/crediti e ricorrenti vengono ricordate il giorno prima. I budget avvisano all'80% e quando vengono superati. Il promemoria giornaliero ti chiede se hai registrato le spese e salta i giorni in cui l'hai già fatto.") }
 
                 Section {
                     Picker("Aspetto", selection: appearanceBinding) {
@@ -156,6 +162,8 @@ struct SettingsView: View {
             .onChange(of: relationshipNotifications) { _, _ in refreshReminders() }
             .onChange(of: recurringNotifications) { _, _ in refreshReminders() }
             .onChange(of: budgetNotifications) { _, _ in refreshReminders() }
+            .onChange(of: dailyReminder) { _, _ in refreshReminders() }
+            .onChange(of: dailyReminderMinutes) { _, _ in refreshReminders() }
         }
     }
 
@@ -164,6 +172,19 @@ struct SettingsView: View {
 
     private func navigationButton(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) { HStack { Label(title, systemImage: icon); Spacer(); Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary) } }
+    }
+
+    /// L'orario è salvato come minuti dalla mezzanotte; il DatePicker lavora con una Date di oggi.
+    private var dailyReminderTime: Binding<Date> {
+        Binding(
+            get: {
+                Calendar.current.date(bySettingHour: dailyReminderMinutes / 60, minute: dailyReminderMinutes % 60, second: 0, of: .now) ?? .now
+            },
+            set: { date in
+                let components = Calendar.current.dateComponents([.hour, .minute], from: date)
+                dailyReminderMinutes = (components.hour ?? 21) * 60 + (components.minute ?? 0)
+            }
+        )
     }
 
     private func refreshReminders() {

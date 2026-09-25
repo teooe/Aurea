@@ -450,6 +450,28 @@ struct AureaTests {
         #expect(short.map { calendar.component(.year, from: $0) } == 2026)
     }
 
+    @Test func dailyReminderSkipsTodayWhenAlreadyLogged() {
+        let calendar = Calendar(identifier: .gregorian)
+        let morning = calendar.date(from: DateComponents(year: 2026, month: 9, day: 25, hour: 10))!
+
+        let notLogged = AppNotificationManager.dailyReminderDates(now: morning, minutesAfterMidnight: 21 * 60, loggedToday: false, days: 3, calendar: calendar)
+        let logged = AppNotificationManager.dailyReminderDates(now: morning, minutesAfterMidnight: 21 * 60, loggedToday: true, days: 3, calendar: calendar)
+
+        #expect(notLogged.map { calendar.component(.day, from: $0) } == [25, 26, 27])
+        #expect(notLogged.allSatisfy { calendar.component(.hour, from: $0) == 21 })
+        #expect(logged.map { calendar.component(.day, from: $0) } == [26, 27])
+    }
+
+    @Test func dailyReminderSkipsTimesAlreadyPassed() {
+        let calendar = Calendar(identifier: .gregorian)
+        let evening = calendar.date(from: DateComponents(year: 2026, month: 9, day: 25, hour: 22))!
+
+        let dates = AppNotificationManager.dailyReminderDates(now: evening, minutesAfterMidnight: 20 * 60 + 30, loggedToday: false, days: 2, calendar: calendar)
+
+        #expect(dates.count == 1)
+        #expect(dates.first.map { calendar.dateComponents([.day, .hour, .minute], from: $0) } == DateComponents(day: 26, hour: 20, minute: 30))
+    }
+
     @Test func relationshipRemainingAmountNeverBecomesNegative() {
         let relationship = Relationship(personName: "Luca", amount: 100, type: .debt, paidAmount: 40)
         #expect(relationship.remainingAmount == 60)

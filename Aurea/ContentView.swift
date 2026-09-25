@@ -84,7 +84,10 @@ struct ContentView: View {
             switch phase {
             case .active: refreshData()
             // Uscendo dall'app il widget riceve i dati aggiornati con le modifiche appena fatte.
-            case .background: WidgetSnapshotBuilder.refresh(in: modelContext)
+            case .background:
+                WidgetSnapshotBuilder.refresh(in: modelContext)
+                // Una spesa appena registrata cancella il promemoria giornaliero di oggi.
+                refreshReminders()
             default: break
             }
         }
