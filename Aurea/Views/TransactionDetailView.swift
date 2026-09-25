@@ -75,13 +75,7 @@ struct TransactionDetailView: View {
     }
 
     private func deleteMovement() {
-        if isTransfer, let groupID = transaction.transferGroupID {
-            for item in allTransactions where item.transferGroupID == groupID {
-                modelContext.delete(item)
-            }
-        } else {
-            modelContext.delete(transaction)
-        }
+        Transaction.delete(transaction, from: allTransactions, in: modelContext)
         dismiss()
     }
 

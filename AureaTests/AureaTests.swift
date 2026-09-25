@@ -195,6 +195,66 @@ struct AureaTests {
         #expect(names == ["Alimentari"])
     }
 
+    @Test func periodFilterRespectsMonthBoundaries() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 25, hour: 12))!
+        let lastDayOfAugust = calendar.date(from: DateComponents(year: 2026, month: 8, day: 31, hour: 23, minute: 59))!
+        let firstOfSeptember = calendar.date(from: DateComponents(year: 2026, month: 9, day: 1))!
+        let july = calendar.date(from: DateComponents(year: 2026, month: 7, day: 10))!
+        let items = [
+            Transaction(type: .expense, amount: 1, date: lastDayOfAugust, category: "Casa", title: "Agosto"),
+            Transaction(type: .expense, amount: 1, date: firstOfSeptember, category: "Casa", title: "Settembre"),
+            Transaction(type: .expense, amount: 1, date: july, category: "Casa", title: "Luglio"),
+        ]
+
+        let lastMonth = TransactionFilter(period: .lastMonth).apply(to: items, now: now, calendar: calendar)
+        let thisMonth = TransactionFilter(period: .thisMonth).apply(to: items, now: now, calendar: calendar)
+        let threeMonths = TransactionFilter(period: .lastThreeMonths).apply(to: items, now: now, calendar: calendar)
+
+        #expect(lastMonth.map(\.title) == ["Agosto"])
+        #expect(thisMonth.map(\.title) == ["Settembre"])
+        #expect(threeMonths.count == 3)
+    }
+
+    @Test func kindAndCategoryFiltersExcludeTransfers() {
+        let items = [
+            Transaction(type: .expense, amount: 10, category: "Cibo", title: "Pizza"),
+            Transaction(type: .income, amount: 100, category: "Stipendio", title: "Settembre"),
+            Transaction(type: .expense, amount: 50, category: Transaction.transferCategory, title: "Giroconto", transferGroupID: UUID()),
+        ]
+
+        #expect(TransactionFilter(kind: .expenses).apply(to: items).map(\.title) == ["Pizza"])
+        #expect(TransactionFilter(kind: .income).apply(to: items).map(\.title) == ["Settembre"])
+        #expect(TransactionFilter(category: "cibo").apply(to: items).map(\.title) == ["Pizza"])
+        #expect(TransactionFilter(searchText: "  pizz ").apply(to: items).map(\.title) == ["Pizza"])
+        #expect(TransactionFilter().apply(to: items).count == 3)
+    }
+
+    @MainActor
+    @Test func deletingTransferRemovesBothHalves() throws {
+        let container = try ModelContainer(for: Wallet.self, Transaction.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let context = container.mainContext
+        let groupID = UUID()
+        let outgoing = Transaction(type: .expense, amount: 50, category: Transaction.transferCategory, title: "→ Risparmi", transferGroupID: groupID)
+        let incoming = Transaction(type: .income, amount: 50, category: Transaction.transferCategory, title: "← Conto", transferGroupID: groupID)
+        let other = Transaction(type: .expense, amount: 5, category: "Cibo", title: "Caffè")
+        [outgoing, incoming, other].forEach { context.insert($0) }
+        try context.save()
+
+        Transaction.delete(incoming, from: [outgoing, incoming, other], in: context)
+        try context.save()
+
+        let remaining = try context.fetch(FetchDescriptor<Transaction>()).map(\.title)
+        #expect(remaining == ["Caffè"])
+    }
+
+    @Test func legacyTransferWithoutGroupCannotBeDeletedFromList() {
+        let legacy = Transaction(type: .expense, amount: 50, category: Transaction.transferCategory, title: "Vecchio")
+        let normal = Transaction(type: .expense, amount: 5, category: "Cibo", title: "Caffè")
+        #expect(!legacy.canBeDeleted)
+        #expect(normal.canBeDeleted)
+    }
+
     @Test func relationshipRemainingAmountNeverBecomesNegative() {
         let relationship = Relationship(personName: "Luca", amount: 100, type: .debt, paidAmount: 40)
         #expect(relationship.remainingAmount == 60)

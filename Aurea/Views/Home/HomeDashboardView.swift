@@ -34,6 +34,16 @@ struct HomeDashboardView: View {
     private var monthIncome: Decimal { monthlyTransactions.filter { $0.type == .income && !$0.isTransfer }.reduce(0) { $0 + valueInEUR($1) } }
     private var monthBalance: Decimal { monthIncome - monthExpenses }
     private var activeBudgets: [Budget] { budgets.filter { !$0.isArchived } }
+    /// Budget attivi dal più vicino al limite, con quanto è già stato speso questo mese.
+    private var budgetProgress: [HomeBudgetProgress] {
+        activeBudgets
+            .map { budget in
+                let spent = FinancialEngine.spentThisMonth(for: budget, transactions: transactions)
+                let ratio = budget.monthlyLimit > 0 ? decimalDouble(spent / budget.monthlyLimit) : 0
+                return HomeBudgetProgress(budget: budget, spent: spent, ratio: ratio)
+            }
+            .sorted { $0.ratio > $1.ratio }
+    }
     private var activeRecurring: [RecurringTransaction] { recurringTransactions.filter { $0.isActive } }
     private var upcomingRecurring: [RecurringTransaction] { activeRecurring.filter { $0.nextDate >= Calendar.current.startOfDay(for: .now) }.sorted { $0.nextDate < $1.nextDate } }
     private var openRelationships: [Relationship] { relationships.filter { !$0.isClosed && $0.remainingAmount > 0 } }
@@ -67,7 +77,7 @@ struct HomeDashboardView: View {
         .sheet(isPresented: $showingAddWallet) { AddWalletView() }
         .sheet(isPresented: $showingAddRelationship) { AddRelationshipView() }
         .sheet(isPresented: $showingAddGoal) { AddGoalView() }
-        .sheet(isPresented: $showingTransactions) { TransactionsView() }
+        .sheet(isPresented: $showingTransactions) { TransactionsView(showsCloseButton: true) }
         .sheet(isPresented: $showingFinanceCenter) { FinanceCenterView() }
         .sheet(isPresented: $showingReports) { NavigationStack { ReportsView(showsDoneButton: true) } }
         .sheet(isPresented: $showingAgenda) { AgendaView() }
@@ -146,6 +156,24 @@ struct HomeDashboardView: View {
                     }
                     .frame(height: 7)
                 }
+                if !budgetProgress.isEmpty {
+                    Divider()
+                    Button { showingFinanceCenter = true } label: {
+                        VStack(spacing: 10) {
+                            ForEach(budgetProgress.prefix(3)) { item in
+                                budgetRow(item.budget, spent: item.spent, ratio: item.ratio)
+                            }
+                            if budgetProgress.count > 3 {
+                                Text("+ \(budgetProgress.count - 3) altri budget")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
                 HStack {
                     Text(monthBalance >= 0 ? "Mese in positivo" : "Spese superiori alle entrate")
                         .font(.caption)
@@ -222,6 +250,23 @@ struct HomeDashboardView: View {
         }.buttonStyle(.plain)
     }
 
+    private func budgetRow(_ budget: Budget, spent: Decimal, ratio: Double) -> some View {
+        let tint: Color = ratio >= 1 ? .red : (ratio >= 0.8 ? .orange : .accentColor)
+        return VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text(budget.title).font(.subheadline.weight(.medium)).lineLimit(1)
+                Spacer()
+                Text("\(spent.formatted(.currency(code: "EUR"))) / \(budget.monthlyLimit.formatted(.currency(code: "EUR")))")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(ratio >= 1 ? .red : .secondary)
+            }
+            ProgressView(value: min(max(ratio, 0), 1))
+                .tint(tint)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityValue("\(Int(ratio * 100)) per cento")
+    }
+
     private func metricBlock(title: String, value: String, subtitle: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title).font(.caption).foregroundStyle(.secondary)
@@ -248,15 +293,9 @@ struct HomeDashboardView: View {
     }
 
     private var budgetWarning: HomeAlertRow? {
-        for budget in activeBudgets {
-            let spent: Decimal
-            if let category = budget.category {
-                spent = monthlyTransactions.filter { $0.type == .expense && $0.category == category }.reduce(0) { $0 + valueInEUR($1) }
-            } else {
-                spent = monthExpenses
-            }
+        for item in budgetProgress {
+            let (budget, spent, ratio) = (item.budget, item.spent, item.ratio)
             guard budget.monthlyLimit > 0 else { continue }
-            let ratio = decimalDouble(spent / budget.monthlyLimit)
             if ratio >= 1 { return HomeAlertRow(icon: "exclamationmark.octagon", title: "Budget superato", detail: "\(budget.title): \(spent.formatted(.currency(code: "EUR"))) su \(budget.monthlyLimit.formatted(.currency(code: "EUR"))).") }
             if ratio >= 0.8 { return HomeAlertRow(icon: "gauge.with.dots.needle.67percent", title: "Budget quasi esaurito", detail: "\(budget.title) è all'\(Int(ratio * 100))%.") }
         }
@@ -267,6 +306,13 @@ struct HomeDashboardView: View {
     private func decimalDouble(_ value: Decimal) -> Double { NSDecimalNumber(decimal: value).doubleValue }
     private var greeting: String { let hour = Calendar.current.component(.hour, from: .now); if hour < 12 { return "Buongiorno" }; if hour < 18 { return "Buon pomeriggio" }; return "Buonasera" }
     private func toggleCard(_ card: HomeCard) { withAnimation(Theme.Animation.standard) { expandedCard = expandedCard == card ? nil : card } }
+}
+
+private struct HomeBudgetProgress: Identifiable {
+    let budget: Budget
+    let spent: Decimal
+    let ratio: Double
+    var id: UUID { budget.id }
 }
 
 private struct HomeAlertRow {

@@ -3,42 +3,40 @@ import SwiftData
 
 struct TransactionsView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @Query(sort: \Transaction.date, order: .reverse)
     private var transactions: [Transaction]
+    @Query(sort: \FinanceCategory.name) private var categories: [FinanceCategory]
+    @Query(sort: \Wallet.name) private var wallets: [Wallet]
 
-    @State private var searchText = ""
-    @State private var filter: MovementFilter = .all
+    /// Mostra "Chiudi" quando la lista è aperta come foglio (dalla Home), non come tab.
+    var showsCloseButton = false
+
+    @State private var filter = TransactionFilter()
     @State private var selectedTransaction: Transaction?
-
-    private enum MovementFilter: String, CaseIterable, Identifiable {
-        case all = "Tutti"
-        case expenses = "Spese"
-        case income = "Entrate"
-
-        var id: String { rawValue }
-    }
+    @State private var pendingDeletion: Transaction?
 
     private var filteredTransactions: [Transaction] {
-        transactions.filter { transaction in
-            let matchesFilter: Bool
-            switch filter {
-            case .all:
-                matchesFilter = true
-            case .expenses:
-                matchesFilter = transaction.type == .expense && !transaction.isTransfer
-            case .income:
-                matchesFilter = transaction.type == .income && !transaction.isTransfer
-            }
+        filter.apply(to: transactions)
+    }
 
-            guard matchesFilter else { return false }
-
-            let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !query.isEmpty else { return true }
-
-            return transaction.title.localizedCaseInsensitiveContains(query) ||
-                transaction.category.localizedCaseInsensitiveContains(query) ||
-                (transaction.wallet?.name.localizedCaseInsensitiveContains(query) ?? false)
+    /// Categorie proposte nel filtro, in base al tipo selezionato.
+    private var filterCategories: [String] {
+        let types: [TransactionType] = switch filter.kind {
+        case .all: [.expense, .income]
+        case .expenses: [.expense]
+        case .income: [.income]
         }
+        var seen = Set<String>()
+        return categories
+            .filter { types.contains($0.type) && !$0.isArchived }
+            .map(\.name)
+            .filter { seen.insert($0.lowercased()).inserted }
+    }
+
+    private var selectedWalletName: String? {
+        guard let id = filter.walletID else { return nil }
+        return wallets.first { $0.persistentModelID == id }?.name
     }
 
     private var groupedTransactions: [(date: Date, transactions: [Transaction])] {
@@ -64,12 +62,28 @@ struct TransactionsView: View {
         NavigationStack {
             List {
                 Section {
-                    Picker("Filtro", selection: $filter) {
-                        ForEach(MovementFilter.allCases) { option in
+                    Picker("Filtro", selection: $filter.kind) {
+                        ForEach(TransactionKindFilter.allCases) { option in
                             Text(option.rawValue).tag(option)
                         }
                     }
                     .pickerStyle(.segmented)
+
+                    if filter.activeRefinementCount > 0 {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                if filter.period != .all {
+                                    activeFilterChip(filter.period.title) { filter.period = .all }
+                                }
+                                if let category = filter.category {
+                                    activeFilterChip(category) { filter.category = nil }
+                                }
+                                if let walletName = selectedWalletName {
+                                    activeFilterChip(walletName) { filter.walletID = nil }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 if !filteredTransactions.isEmpty {
@@ -84,9 +98,10 @@ struct TransactionsView: View {
 
                 if groupedTransactions.isEmpty {
                     Section {
+                        let isFiltering = !filter.searchText.isEmpty || filter.activeRefinementCount > 0
                         ContentUnavailableView(
-                            searchText.isEmpty ? "Nessun movimento" : "Nessun risultato",
-                            systemImage: searchText.isEmpty ? "tray" : "magnifyingglass"
+                            isFiltering ? "Nessun risultato" : "Nessun movimento",
+                            systemImage: isFiltering ? "magnifyingglass" : "tray"
                         )
                     }
                 } else {
@@ -125,23 +140,102 @@ struct TransactionsView: View {
                                     .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
+                                .swipeActions(edge: .trailing) {
+                                    if transaction.canBeDeleted {
+                                        Button("Elimina", systemImage: "trash") { pendingDeletion = transaction }
+                                            .tint(.red)
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
-            .searchable(text: $searchText, prompt: "Cerca titolo, categoria o portafoglio")
+            .searchable(text: $filter.searchText, prompt: "Cerca titolo, categoria o portafoglio")
             .navigationTitle("Movimenti")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Chiudi") { dismiss() }
+                ToolbarItem(placement: .topBarTrailing) { filterMenu }
+                if showsCloseButton {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Chiudi") { dismiss() }
+                    }
                 }
             }
             .sheet(item: $selectedTransaction) { transaction in
                 TransactionDetailView(transaction: transaction)
             }
+            .onChange(of: filter.kind) { _, _ in
+                // Una categoria di spesa non ha senso filtrando solo le entrate, e viceversa.
+                if let category = filter.category,
+                   !filterCategories.contains(where: { $0.caseInsensitiveCompare(category) == .orderedSame }) {
+                    filter.category = nil
+                }
+            }
+            .confirmationDialog(
+                pendingDeletion?.isTransfer == true ? "Eliminare l’intero trasferimento?" : "Eliminare questo movimento?",
+                isPresented: Binding(get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } }),
+                titleVisibility: .visible,
+                presenting: pendingDeletion
+            ) { transaction in
+                Button("Elimina", role: .destructive) {
+                    Transaction.delete(transaction, from: transactions, in: modelContext)
+                    pendingDeletion = nil
+                }
+                Button("Annulla", role: .cancel) { pendingDeletion = nil }
+            } message: { transaction in
+                Text("\(transaction.title) · \(formattedAmount(for: transaction))")
+            }
         }
+    }
+
+    private var filterMenu: some View {
+        Menu {
+            Picker("Periodo", selection: $filter.period) {
+                ForEach(TransactionPeriod.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.menu)
+
+            Picker("Categoria", selection: $filter.category) {
+                Text("Tutte le categorie").tag(nil as String?)
+                ForEach(filterCategories, id: \.self) { Text($0).tag($0 as String?) }
+            }
+            .pickerStyle(.menu)
+
+            Picker("Portafoglio", selection: $filter.walletID) {
+                Text("Tutti i portafogli").tag(nil as PersistentIdentifier?)
+                ForEach(wallets) { Text($0.name).tag($0.persistentModelID as PersistentIdentifier?) }
+            }
+            .pickerStyle(.menu)
+
+            if filter.activeRefinementCount > 0 {
+                Button("Azzera filtri", role: .destructive) {
+                    filter.period = .all
+                    filter.category = nil
+                    filter.walletID = nil
+                }
+            }
+        } label: {
+            Image(systemName: filter.activeRefinementCount > 0
+                  ? "line.3.horizontal.decrease.circle.fill"
+                  : "line.3.horizontal.decrease.circle")
+        }
+        .accessibilityLabel("Filtri")
+    }
+
+    private func activeFilterChip(_ title: String, onRemove: @escaping () -> Void) -> some View {
+        Button(action: onRemove) {
+            HStack(spacing: 4) {
+                Text(title)
+                Image(systemName: "xmark.circle.fill")
+            }
+            .font(.caption.weight(.medium))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.accentColor.opacity(0.15), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Rimuovi filtro \(title)")
     }
 
     private func summaryItem(_ title: String, amount: Decimal, color: Color) -> some View {
