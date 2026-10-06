@@ -4,6 +4,7 @@ import UIKit
 
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.modelContext) private var modelContext
     @Query private var relationships: [Relationship]
     @Query private var budgets: [Budget]
     @Query private var recurringTransactions: [RecurringTransaction]
@@ -15,6 +16,7 @@ struct ContentView: View {
     @State private var previousSelection = 0
     @State private var showingQuickAdd = false
     @State private var showingBrandSplash = true
+    private let quickAddRequest = QuickAddRequest.shared
 
     private var appearance: AppAppearance { AppAppearance(rawValue: appearanceRaw) ?? .system }
     private var isUITesting: Bool { ProcessInfo.processInfo.arguments.contains("-UITesting") }
@@ -34,11 +36,17 @@ struct ContentView: View {
                     .tag(4)
                     .tabItem { Label("Aggiungi", systemImage: "plus.circle.fill") }
 
-                AureaAssistantView()
+                AnalysisView()
                     .tag(3)
-                    .tabItem { Label("Aurea", systemImage: "sparkles") }
+                    .tabItem { Label("Analisi", systemImage: "sparkles") }
             }
             .opacity(showingBrandSplash && !isUITesting ? 0 : 1)
+            .overlay(alignment: .bottom) {
+                // Sopra la barra dei tab: resta visibile anche dopo la chiusura del foglio "Nuovo movimento".
+                UndoBannerView(banner: UndoBanner.shared)
+                    .padding(.bottom, 64)
+                    .animation(.spring(duration: 0.35), value: UndoBanner.shared.notice?.id)
+            }
 
             if showingBrandSplash && !isUITesting {
                 BrandSplashView()
@@ -68,18 +76,47 @@ struct ContentView: View {
                     }
                 }
             }
-            refreshReminders()
+            if !isUITesting { AppLock.shared.lockOnLaunch() }
+            refreshData()
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { refreshReminders() }
+            if !isUITesting { AppLock.shared.handle(phase) }
+            switch phase {
+            case .active: refreshData()
+            // Uscendo dall'app il widget riceve i dati aggiornati con le modifiche appena fatte.
+            case .background:
+                WidgetSnapshotBuilder.refresh(in: modelContext)
+                // Una spesa appena registrata cancella il promemoria giornaliero di oggi.
+                refreshReminders()
+            default: break
+            }
         }
-        .sheet(isPresented: $showingQuickAdd) { GlobalQuickAddView() }
+        .onChange(of: quickAddRequest.isPending, initial: true) { _, pending in
+            if pending {
+                showingQuickAdd = true
+                quickAddRequest.isPending = false
+            }
+        }
+        .onOpenURL { url in
+            // Link del widget: aurea://nuovo-movimento
+            if url.scheme == "aurea" && url.host() == "nuovo-movimento" {
+                showingQuickAdd = true
+            }
+        }
+        .sheet(isPresented: $showingQuickAdd) { QuickAddView() }
         .fullScreenCover(isPresented: Binding(
             get: { !onboardingCompleted && !isUITesting && !showingBrandSplash },
             set: { if !$0 { onboardingCompleted = true } }
         )) {
             OnboardingView()
         }
+    }
+
+    private func refreshData() {
+        CategoryService.synchronize(in: modelContext)
+        RecurringEngine.generateDueTransactions(from: recurringTransactions, in: modelContext)
+        WidgetSnapshotBuilder.refresh(in: modelContext)
+        refreshReminders()
     }
 
     private func refreshReminders() {

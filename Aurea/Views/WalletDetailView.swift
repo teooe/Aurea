@@ -78,7 +78,7 @@ struct WalletDetailView: View {
     }
 
     private func icon(for transaction: Transaction) -> String {
-        if transaction.category == "Trasferimento" { return "arrow.left.arrow.right.circle" }
+        if transaction.isTransfer { return "arrow.left.arrow.right.circle" }
         switch transaction.type {
         case .expense: return "arrow.down.circle"
         case .income: return "arrow.up.circle"
@@ -96,7 +96,7 @@ struct WalletDetailView: View {
     }
 
     private func amountColor(for transaction: Transaction) -> Color {
-        if transaction.category == "Trasferimento" { return .secondary }
+        if transaction.isTransfer { return .secondary }
         switch transaction.type {
         case .expense: return .red
         case .income: return .green

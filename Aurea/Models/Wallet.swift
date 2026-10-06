@@ -34,6 +34,11 @@ final class Wallet {
         set { archivedFlag = newValue }
     }
 
+    /// Identità esplicita per `ForEach` e liste. Senza, con Xcode 26 e l'isolamento su MainActor
+    /// il compilatore non trova l'`id` di `Identifiable` (gli altri modelli hanno `var id: UUID`).
+    /// È calcolata, quindi non viene salvata e non cambia lo schema del database.
+    var id: ObjectIdentifier { ObjectIdentifier(self) }
+
     var effectiveExchangeRateToEUR: Decimal {
         if currencyCode == "EUR" { return 1 }
         return exchangeRateToEUR ?? 1

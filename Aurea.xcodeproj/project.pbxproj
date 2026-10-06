@@ -187,10 +187,10 @@
 				};
 			};
 			buildConfigurationList = CB6248C2302EF0B100285328 /* Build configuration list for PBXProject "Aurea" */;
-			developmentRegion = en;
+			developmentRegion = it;
 			hasScannedForEncodings = 0;
 			knownRegions = (
-				en,
+				it,
 				Base,
 			);
 			mainGroup = CB6248BE302EF0B100285328;
@@ -398,6 +398,8 @@
 				DEVELOPMENT_TEAM = UWUQQGN358;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Aurea usa la fotocamera per leggere importo e data dagli scontrini.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Aurea usa Face ID per proteggere i tuoi dati finanziari.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -430,6 +432,8 @@
 				DEVELOPMENT_TEAM = UWUQQGN358;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Aurea usa la fotocamera per leggere importo e data dagli scontrini.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Aurea usa Face ID per proteggere i tuoi dati finanziari.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

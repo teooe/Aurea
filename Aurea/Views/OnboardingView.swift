@@ -10,10 +10,10 @@ struct OnboardingView: View {
     @State private var showingAddWallet = false
 
     private let pages: [OnboardingPage] = [
-        OnboardingPage(icon: "sparkles", title: "Benvenuto in Aurea", text: "Finanze e agenda in un unico spazio, semplice e personale."),
+        OnboardingPage(icon: "sparkles", title: "Benvenuto in Aurea", text: "Spese, budget e obiettivi in un unico spazio, semplice e personale."),
         OnboardingPage(icon: "wallet.pass", title: "Tieni sotto controllo i soldi", text: "Portafogli, movimenti, budget, obiettivi e debiti o crediti lavorano insieme."),
-        OnboardingPage(icon: "calendar", title: "Organizza le giornate", text: "Attività, eventi, scadenze, priorità e promemoria sono sempre a portata di mano."),
-        OnboardingPage(icon: "sparkles.rectangle.stack", title: "Chiedi ad Aurea", text: "L'assistente può leggere i dati dell'app, rispondere alle tue domande e preparare azioni da confermare.")
+        OnboardingPage(icon: "plus.circle", title: "Registra in un attimo", text: "Tocca +, scrivi l'importo e scegli la categoria. Oppure chiedi a Siri: «Registra una spesa su Aurea»."),
+        OnboardingPage(icon: "sparkles.rectangle.stack", title: "Analisi automatica", text: "Aurea ti segnala budget a rischio, dove risparmiare e le scadenze in arrivo, senza dover chiedere.")
     ]
 
     var body: some View {

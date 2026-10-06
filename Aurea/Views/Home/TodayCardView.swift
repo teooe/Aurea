@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 struct TodayCardView: View {
 
@@ -103,7 +104,7 @@ struct TodayCardView: View {
     }
 
     private func color(for transaction: Transaction) -> Color {
-        if transaction.category == "Trasferimento" { return Theme.Colors.primaryText }
+        if transaction.isTransfer { return Theme.Colors.primaryText }
         switch transaction.type {
         case .expense: return Theme.Colors.expense
         case .income: return Theme.Colors.income

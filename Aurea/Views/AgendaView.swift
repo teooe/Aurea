@@ -23,8 +23,8 @@ struct AgendaView: View {
     private var overdueItems: [AgendaItem] { guard Calendar.current.isDateInToday(selectedDate) else { return [] }; let start = Calendar.current.startOfDay(for: .now); return filteredItems.filter { $0.date < start && !$0.isCompleted && ($0.type == .task || $0.type == .deadline) }.sorted(by: agendaSort) }
     private var upcomingItems: [AgendaItem] { Array(filteredItems.filter { $0.date > Calendar.current.endOfDay(for: selectedDate) && !$0.isCompleted }.sorted(by: agendaSort).prefix(8)) }
     private var dayTransactions: [Transaction] { transactions.filter { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) } }
-    private var dayIncome: Decimal { dayTransactions.filter { $0.type == .income && $0.category != "Trasferimento" }.reduce(0) { $0 + $1.amount } }
-    private var dayExpenses: Decimal { dayTransactions.filter { $0.type == .expense && $0.category != "Trasferimento" }.reduce(0) { $0 + $1.amount } }
+    private var dayIncome: Decimal { FinancialEngine.totalIncome(from: dayTransactions) }
+    private var dayExpenses: Decimal { FinancialEngine.totalExpenses(from: dayTransactions) }
     private var selectedDayTitle: String { Calendar.current.isDateInToday(selectedDate) ? "Oggi" : selectedDate.formatted(date: .complete, time: .omitted) }
     private var isSearching: Bool { !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 

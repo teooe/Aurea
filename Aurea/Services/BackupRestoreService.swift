@@ -85,6 +85,7 @@ enum BackupRestoreService {
         for dto in payload.relationshipPayments { let item = RelationshipPayment(relationshipID: dto.relationshipID, amount: dto.amount, date: dto.date); item.id = dto.id; context.insert(item) }
         for dto in payload.budgets { let item = Budget(title: dto.title, category: dto.category, monthlyLimit: dto.monthlyLimit, createdAt: dto.createdAt, isArchived: dto.isArchived); item.id = dto.id; context.insert(item) }
         for dto in payload.recurring { let item = RecurringTransaction(title: dto.title, amount: dto.amount, category: dto.category, type: TransactionType(rawValue: dto.type) ?? .expense, frequency: RecurringFrequency(rawValue: dto.frequency) ?? .monthly, nextDate: dto.nextDate, wallet: dto.walletName.flatMap { walletMap[$0] }, isActive: dto.isActive); item.id = dto.id; context.insert(item) }
+        CategoryService.synchronize(in: context)
         try context.save()
     }
 
