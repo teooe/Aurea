@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		CB62490E302EF0B300285328 /* AureaWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CB624901302EF0B300285328 /* AureaWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		CB6248D7302EF0B300285328 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -21,17 +25,59 @@
 			remoteGlobalIDString = CB6248C6302EF0B100285328;
 			remoteInfo = Aurea;
 		};
+		CB62490C302EF0B300285328 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CB6248BF302EF0B100285328 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CB624905302EF0B300285328;
+			remoteInfo = AureaWidgetExtension;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		CB62490F302EF0B300285328 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				CB62490E302EF0B300285328 /* AureaWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		CB6248C7302EF0B100285328 /* Aurea.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Aurea.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CB6248D6302EF0B300285328 /* AureaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AureaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		CB6248E0302EF0B300285328 /* AureaUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AureaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		CB624901302EF0B300285328 /* AureaWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = AureaWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		CB624903302EF0B300285328 /* Exceptions for "AureaWidget" folder in "AureaWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = CB624905302EF0B300285328 /* AureaWidgetExtension */;
+		};
+		CB624904302EF0B300285328 /* Exceptions for "Aurea" folder in "AureaWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Shared/WidgetSnapshot.swift,
+			);
+			target = CB624905302EF0B300285328 /* AureaWidgetExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		CB6248C9302EF0B100285328 /* Aurea */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				CB624904302EF0B300285328 /* Exceptions for "Aurea" folder in "AureaWidgetExtension" target */,
+			);
 			path = Aurea;
 			sourceTree = "<group>";
 		};
@@ -43,6 +89,14 @@
 		CB6248E3302EF0B300285328 /* AureaUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = AureaUITests;
+			sourceTree = "<group>";
+		};
+		CB624902302EF0B300285328 /* AureaWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				CB624903302EF0B300285328 /* Exceptions for "AureaWidget" folder in "AureaWidgetExtension" target */,
+			);
+			path = AureaWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -69,6 +123,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		CB624907302EF0B300285328 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -78,6 +139,7 @@
 				CB6248C9302EF0B100285328 /* Aurea */,
 				CB6248D9302EF0B300285328 /* AureaTests */,
 				CB6248E3302EF0B300285328 /* AureaUITests */,
+				CB624902302EF0B300285328 /* AureaWidget */,
 				CB6248C8302EF0B100285328 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -88,6 +150,7 @@
 				CB6248C7302EF0B100285328 /* Aurea.app */,
 				CB6248D6302EF0B300285328 /* AureaTests.xctest */,
 				CB6248E0302EF0B300285328 /* AureaUITests.xctest */,
+				CB624901302EF0B300285328 /* AureaWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -102,10 +165,12 @@
 				CB6248C3302EF0B100285328 /* Sources */,
 				CB6248C4302EF0B100285328 /* Frameworks */,
 				CB6248C5302EF0B100285328 /* Resources */,
+				CB62490F302EF0B300285328 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				CB62490D302EF0B300285328 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				CB6248C9302EF0B100285328 /* Aurea */,
@@ -163,6 +228,28 @@
 			productReference = CB6248E0302EF0B300285328 /* AureaUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		CB624905302EF0B300285328 /* AureaWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CB624909302EF0B300285328 /* Build configuration list for PBXNativeTarget "AureaWidgetExtension" */;
+			buildPhases = (
+				CB624906302EF0B300285328 /* Sources */,
+				CB624907302EF0B300285328 /* Frameworks */,
+				CB624908302EF0B300285328 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				CB624902302EF0B300285328 /* AureaWidget */,
+			);
+			name = AureaWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = AureaWidgetExtension;
+			productReference = CB624901302EF0B300285328 /* AureaWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -184,6 +271,9 @@
 						CreatedOnToolsVersion = 26.6;
 						TestTargetID = CB6248C6302EF0B100285328;
 					};
+					CB624905302EF0B300285328 = {
+						CreatedOnToolsVersion = 26.6;
+					};
 				};
 			};
 			buildConfigurationList = CB6248C2302EF0B100285328 /* Build configuration list for PBXProject "Aurea" */;
@@ -203,6 +293,7 @@
 				CB6248C6302EF0B100285328 /* Aurea */,
 				CB6248D5302EF0B300285328 /* AureaTests */,
 				CB6248DF302EF0B300285328 /* AureaUITests */,
+				CB624905302EF0B300285328 /* AureaWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -223,6 +314,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		CB6248DE302EF0B300285328 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CB624908302EF0B300285328 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -253,6 +351,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		CB624906302EF0B300285328 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -265,6 +370,11 @@
 			isa = PBXTargetDependency;
 			target = CB6248C6302EF0B100285328 /* Aurea */;
 			targetProxy = CB6248E1302EF0B300285328 /* PBXContainerItemProxy */;
+		};
+		CB62490D302EF0B300285328 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CB624905302EF0B300285328 /* AureaWidgetExtension */;
+			targetProxy = CB62490C302EF0B300285328 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -536,6 +646,64 @@
 			};
 			name = Release;
 		};
+		CB62490A302EF0B300285328 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = UWUQQGN358;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = AureaWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Aurea;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aurea.Aurea.AureaWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		CB62490B302EF0B300285328 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = UWUQQGN358;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = AureaWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Aurea;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aurea.Aurea.AureaWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -571,6 +739,15 @@
 			buildConfigurations = (
 				CB6248F1302EF0B300285328 /* Debug */,
 				CB6248F2302EF0B300285328 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CB624909302EF0B300285328 /* Build configuration list for PBXNativeTarget "AureaWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CB62490A302EF0B300285328 /* Debug */,
+				CB62490B302EF0B300285328 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

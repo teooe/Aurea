@@ -5,5 +5,6 @@ import WidgetKit
 struct AureaWidgetBundle: WidgetBundle {
     var body: some Widget {
         AureaSpendingWidget()
+        AureaQuickAddWidget()
     }
 }

@@ -3,6 +3,8 @@ import WidgetKit
 
 // Widget "Spese del mese". Legge solo il riepilogo che l'app salva nell'App Group
 // (WidgetSnapshot.swift, condiviso con l'app): non apre il database.
+// Senza App Group (account Apple gratuito) il riepilogo non arriva e il widget fa da
+// pulsante "Nuova spesa": toccandolo si apre il modulo di inserimento.
 
 nonisolated struct SpendingEntry: TimelineEntry {
     let date: Date
@@ -58,8 +60,14 @@ struct SpendingWidgetView: View {
                 Text("Speso \(euro(snapshot.monthExpenses)) questo mese")
                     .privacySensitive()
             } else {
-                Text("Apri Aurea")
+                Label("Nuova spesa", systemImage: "plus.circle")
             }
+        case .accessoryRectangular where snapshot == nil:
+            VStack(alignment: .leading, spacing: 2) {
+                Label("Aurea", systemImage: "plus.circle.fill").font(.headline).widgetAccentable()
+                Text("Tocca per registrare una spesa").font(.caption2)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         case .accessoryRectangular:
             VStack(alignment: .leading, spacing: 2) {
                 Text("Speso questo mese").font(.caption2)
@@ -73,6 +81,8 @@ struct SpendingWidgetView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        case .systemSmall where snapshot == nil, .systemMedium where snapshot == nil:
+            QuickAddWidgetView(compact: family == .systemSmall)
         case .systemMedium:
             HStack(alignment: .top, spacing: 16) {
                 summary
@@ -111,12 +121,6 @@ struct SpendingWidgetView: View {
                         .privacySensitive()
                 }
                 .font(.caption)
-            } else {
-                Spacer(minLength: 0)
-                Text("Apri Aurea per vedere le spese del mese.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 0)
             }
         }
     }
@@ -152,6 +156,74 @@ struct SpendingWidgetView: View {
     private func euro(_ value: Decimal) -> String {
         value.formatted(.currency(code: "EUR").precision(.fractionLength(0...2)))
     }
+}
+
+/// Pulsante "Nuova spesa": è il widget dedicato e anche ciò che mostra "Spese del mese" quando non ha dati.
+struct QuickAddWidgetView: View {
+    @Environment(\.widgetFamily) private var family
+    var compact = true
+
+    var body: some View {
+        if family == .accessoryCircular {
+            ZStack {
+                AccessoryWidgetBackground()
+                Image(systemName: "plus")
+                    .font(.title.weight(.semibold))
+                    .widgetAccentable()
+            }
+            .accessibilityLabel("Nuova spesa")
+        } else {
+            card
+        }
+    }
+
+    private var card: some View {
+        VStack(alignment: compact ? .leading : .center, spacing: 6) {
+            Image(systemName: "plus.circle.fill")
+                .font(.system(size: compact ? 40 : 44, weight: .semibold))
+                .foregroundStyle(.tint)
+                .widgetAccentable()
+            if !compact { Spacer(minLength: 0).frame(maxHeight: 4) }
+            Text("Nuova spesa")
+                .font(.headline)
+            Text("Tocca per registrarla in Aurea")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(compact ? .leading : .center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: compact ? .bottomLeading : .center)
+    }
+}
+
+nonisolated struct QuickAddProvider: TimelineProvider {
+    func placeholder(in context: Context) -> SpendingEntry { SpendingEntry(date: .now, snapshot: nil) }
+
+    func getSnapshot(in context: Context, completion: @escaping (SpendingEntry) -> Void) {
+        completion(placeholder(in: context))
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<SpendingEntry>) -> Void) {
+        completion(Timeline(entries: [placeholder(in: context)], policy: .never))
+    }
+}
+
+struct AureaQuickAddWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "AureaQuickAdd", provider: QuickAddProvider()) { _ in
+            QuickAddWidgetView()
+                .containerBackground(.fill.tertiary, for: .widget)
+                .widgetURL(URL(string: "aurea://nuovo-movimento"))
+        }
+        .configurationDisplayName("Nuova spesa")
+        .description("Un tocco per aprire Aurea direttamente sul modulo di una nuova spesa.")
+        .supportedFamilies([.systemSmall, .accessoryCircular])
+    }
+}
+
+#Preview(as: .systemSmall) {
+    AureaQuickAddWidget()
+} timeline: {
+    SpendingEntry(date: .now, snapshot: nil)
 }
 
 #Preview(as: .systemMedium) {
