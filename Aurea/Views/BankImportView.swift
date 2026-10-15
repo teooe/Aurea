@@ -15,6 +15,8 @@ struct BankImportView: View {
     @State private var fileName: String?
     @State private var table: BankImport.Table?
     @State private var mapping = BankImport.ColumnMapping()
+    /// Importo in due colonne (uscite e entrate) invece che in una sola con il segno.
+    @State private var separateColumns = false
     @State private var rows: [BankImport.Row] = []
     @State private var wallet: Wallet?
     @State private var errorMessage: String?
@@ -77,16 +79,17 @@ struct BankImportView: View {
             columnPicker("Data", selection: $mapping.date, header: table.header)
             columnPicker("Descrizione", selection: $mapping.description, header: table.header)
             Picker("Importo", selection: Binding(
-                get: { mapping.amount != nil || (mapping.debit == nil && mapping.credit == nil) },
-                set: { single in
-                    if single { mapping.debit = nil; mapping.credit = nil } else { mapping.amount = nil }
+                get: { separateColumns },
+                set: { separate in
+                    separateColumns = separate
+                    if separate { mapping.amount = nil } else { mapping.debit = nil; mapping.credit = nil }
                 }
             )) {
-                Text("Una colonna").tag(true)
-                Text("Uscite e entrate").tag(false)
+                Text("Una colonna").tag(false)
+                Text("Uscite e entrate").tag(true)
             }
             .pickerStyle(.segmented)
-            if mapping.amount != nil || (mapping.debit == nil && mapping.credit == nil) {
+            if !separateColumns {
                 columnPicker("Importo (con segno)", selection: $mapping.amount, header: table.header)
             } else {
                 columnPicker("Uscite / addebiti", selection: $mapping.debit, header: table.header)
@@ -189,6 +192,7 @@ struct BankImportView: View {
             fileName = url.lastPathComponent
             table = parsed
             mapping = BankImport.ColumnMapping.guess(header: parsed.header)
+            separateColumns = mapping.amount == nil && (mapping.debit != nil || mapping.credit != nil)
             rebuildRows()
             if !mapping.isUsable {
                 errorMessage = "Non ho riconosciuto tutte le colonne: indicale qui sotto."
