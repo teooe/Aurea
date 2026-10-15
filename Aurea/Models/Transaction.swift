@@ -10,7 +10,7 @@ enum TransactionType: String, Codable {
 @Model
 final class Transaction {
     var id: UUID = UUID()
-    var type: TransactionType = .expense
+    var type: TransactionType = TransactionType.expense
     var amount: Decimal = 0
     var date: Date = Date.now
     var category: String = ""
