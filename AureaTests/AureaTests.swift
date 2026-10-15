@@ -616,6 +616,38 @@ struct AureaTests {
         #expect(budget.rollover)
     }
 
+    @Test func splitKeepsCentsWithPayerAndSumsToTotal() {
+        let even = ExpenseSplitter.split(total: 60, otherPeople: 2)
+        #expect(even.mine == 20)
+        #expect(even.each == 20)
+
+        // 100 € in tre: 33,33 € a testa agli altri, 33,34 € a te.
+        let odd = ExpenseSplitter.split(total: 100, otherPeople: 2)
+        #expect(odd.each == Decimal(string: "33.33")!)
+        #expect(odd.mine == Decimal(string: "33.34")!)
+        #expect(odd.mine + odd.each * 2 == 100)
+
+        #expect(ExpenseSplitter.split(total: 50, otherPeople: 0).mine == 50)
+    }
+
+    @Test func sharedExpenseRecordsShareAdvanceAndCredits() throws {
+        let container = try ModelContainer(for: AureaStore.schema, configurations: ModelConfiguration(schema: AureaStore.schema, isStoredInMemoryOnly: true))
+        let context = container.mainContext
+        let wallet = Wallet(name: "Carta", icon: "creditcard", initialBalance: 200)
+        context.insert(wallet)
+
+        let created = ExpenseSplitter.record(total: 60, people: ["Luca", " Giulia ", ""], title: "Pizzeria", category: "Svago", date: .now, wallet: wallet, in: context)
+        try context.save()
+
+        let transactions = try context.fetch(FetchDescriptor<Transaction>())
+        let credits = try context.fetch(FetchDescriptor<Relationship>())
+        #expect(created.count == 4) // quota, anticipo, due crediti
+        #expect(FinancialEngine.totalExpenses(from: transactions) == 20)
+        #expect(FinancialEngine.balance(for: wallet) == 140)
+        #expect(Set(credits.map(\.personName)) == ["Luca", "Giulia"])
+        #expect(credits.allSatisfy { $0.type == .credit && $0.amount == 20 })
+    }
+
     @Test func relationshipRemainingAmountNeverBecomesNegative() {
         let relationship = Relationship(personName: "Luca", amount: 100, type: .debt, paidAmount: 40)
         #expect(relationship.remainingAmount == 60)

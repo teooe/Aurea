@@ -28,6 +28,7 @@ struct QuickAddView: View {
     @Query private var wallets: [Wallet]
     @Query(sort: \Transaction.date, order: .reverse) private var transactions: [Transaction]
     @Query(sort: \FinanceCategory.name) private var financeCategories: [FinanceCategory]
+    @Query(sort: \Relationship.createdAt, order: .reverse) private var relationships: [Relationship]
 
     @State private var type: TransactionType = .expense
     @State private var title = ""
@@ -45,6 +46,9 @@ struct QuickAddView: View {
     /// Foto letta dallo scontrino: se `attachReceipt` è attivo viene salvata con il movimento.
     @State private var receiptImage: UIImage?
     @State private var attachReceipt = true
+    /// Spesa pagata da te per più persone: la tua quota è spesa, il resto diventa credito.
+    @State private var isShared = false
+    @State private var sharedPeople: [SharedPerson] = [SharedPerson()]
 
     /// Con un precompilato la data resta "adesso": ripetere significa registrare di nuovo oggi.
     init(prefill: QuickAddPrefill? = nil) {
@@ -208,6 +212,10 @@ struct QuickAddView: View {
                         }
                     }
                 }
+
+                if type == .expense {
+                    splitSection
+                }
             }
             .navigationTitle("Nuovo movimento")
             .navigationBarTitleDisplayMode(.inline)
@@ -354,7 +362,75 @@ struct QuickAddView: View {
         if type == .transfer {
             return baseValid && activeWallets.count >= 2 && destinationWallet != nil && destinationWallet !== selectedWallet
         }
-        return baseValid && !trimmedCategory.isEmpty && !Transaction.isReservedCategory(category)
+        let sharedValid = !isShared || !sharedNames.isEmpty
+        return baseValid && sharedValid && !trimmedCategory.isEmpty && !Transaction.isReservedCategory(category)
+    }
+
+    // MARK: - Spesa condivisa
+
+    private var sharedNames: [String] {
+        sharedPeople.map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+    }
+
+    /// Persone già presenti nei debiti e crediti, da proporre come scorciatoia.
+    private var peopleSuggestions: [String] {
+        var seen = Set(sharedNames.map { $0.lowercased() })
+        return relationships.map(\.personName).filter { seen.insert($0.lowercased()).inserted }.prefix(6).map { $0 }
+    }
+
+    @ViewBuilder private var splitSection: some View {
+        Section {
+            Toggle("Spesa condivisa", isOn: $isShared.animation())
+            if isShared {
+                ForEach($sharedPeople) { $person in
+                    HStack {
+                        TextField("Nome di chi divide con te", text: $person.name)
+                            .textInputAutocapitalization(.words)
+                        if sharedPeople.count > 1 {
+                            Button {
+                                sharedPeople.removeAll { $0.id == person.id }
+                            } label: {
+                                Image(systemName: "minus.circle.fill").foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Rimuovi \(person.name)")
+                        }
+                    }
+                }
+                Button("Aggiungi persona", systemImage: "person.badge.plus") {
+                    sharedPeople.append(SharedPerson())
+                }
+                if !peopleSuggestions.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(peopleSuggestions, id: \.self) { name in
+                                Button(name) { addSuggested(name) }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
+                            }
+                        }
+                    }
+                }
+            }
+        } header: {
+            Text("Dividi")
+        } footer: {
+            if isShared, let total = parsedAmount, total > 0, !sharedNames.isEmpty {
+                let split = ExpenseSplitter.split(total: total, otherPeople: sharedNames.count)
+                let code = selectedWallet?.currencyCode ?? "EUR"
+                Text("Paghi tu \(total.formatted(.currency(code: code))). La tua quota è \(split.mine.formatted(.currency(code: code))) e conta come spesa; \(split.each.formatted(.currency(code: code))) a testa diventano crediti verso \(sharedNames.joined(separator: ", ")).")
+            } else if isShared {
+                Text("Indica con chi dividi: la spesa viene divisa in parti uguali.")
+            }
+        }
+    }
+
+    private func addSuggested(_ name: String) {
+        if let index = sharedPeople.firstIndex(where: { $0.name.trimmingCharacters(in: .whitespaces).isEmpty }) {
+            sharedPeople[index].name = name
+        } else {
+            sharedPeople.append(SharedPerson(name: name))
+        }
     }
 
     private func saveTransaction() {
@@ -375,14 +451,24 @@ struct QuickAddView: View {
             // Senza descrizione il movimento prende il nome della categoria.
             let resolvedCategory = CategoryService.resolve(trimmedCategory, type: type, in: modelContext)
             let cleanTitle = trimmedTitle.isEmpty ? resolvedCategory : trimmedTitle
-            let transaction = Transaction(type: type, amount: decimalAmount, date: date, category: resolvedCategory, title: cleanTitle, wallet: wallet)
-            if type == .expense, attachReceipt, let receiptImage {
-                transaction.receiptImageData = ReceiptImage.jpegData(from: receiptImage)
-            }
-            modelContext.insert(transaction)
-            let kind = type == .income ? "Entrata registrata" : "Spesa registrata"
+            let receiptData = type == .expense && attachReceipt ? receiptImage.flatMap { ReceiptImage.jpegData(from: $0) } : nil
             let value = decimalAmount.formatted(.currency(code: wallet.currencyCode))
-            UndoBanner.shared.post([transaction], message: "\(kind) · \(value) · \(resolvedCategory)")
+
+            if type == .expense, isShared, !sharedNames.isEmpty {
+                let created = ExpenseSplitter.record(
+                    total: decimalAmount, people: sharedNames, title: cleanTitle, category: resolvedCategory,
+                    date: date, wallet: wallet, in: modelContext
+                )
+                (created.first as? Transaction)?.receiptImageData = receiptData
+                let mine = ExpenseSplitter.split(total: decimalAmount, otherPeople: sharedNames.count).mine
+                UndoBanner.shared.post(created, message: "Spesa condivisa · \(value) · tua quota \(mine.formatted(.currency(code: wallet.currencyCode)))")
+            } else {
+                let transaction = Transaction(type: type, amount: decimalAmount, date: date, category: resolvedCategory, title: cleanTitle, wallet: wallet)
+                transaction.receiptImageData = receiptData
+                modelContext.insert(transaction)
+                let kind = type == .income ? "Entrata registrata" : "Spesa registrata"
+                UndoBanner.shared.post([transaction], message: "\(kind) · \(value) · \(resolvedCategory)")
+            }
         }
 
         dismiss()
@@ -392,4 +478,9 @@ struct QuickAddView: View {
 #Preview {
     QuickAddView()
         .modelContainer(for: [Wallet.self, Transaction.self, FinanceCategory.self], inMemory: true)
+}
+
+private struct SharedPerson: Identifiable {
+    let id = UUID()
+    var name = ""
 }
