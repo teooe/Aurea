@@ -42,20 +42,6 @@ final class ScreenshotTests: XCTestCase {
         if app.navigationBars["Nuovo movimento"].waitForExistence(timeout: 5) {
             sleep(1)
             snapshot("06-Nuovo-movimento")
-            let shared = app.switches["Spesa condivisa"]
-            if reveal(shared, in: app) {
-                // Su iOS 26 l'interruttore vero è dentro la riga: toccare la riga non lo cambia.
-                let control = shared.switches.firstMatch
-                (control.exists ? control : shared).tap()
-                let name = app.textFields["Nome di chi divide con te"].firstMatch
-                if name.waitForExistence(timeout: 2) {
-                    name.tap()
-                    name.typeText("Luca")
-                }
-                app.swipeUp()
-                sleep(1)
-                snapshot("07-Spesa-condivisa")
-            }
             app.buttons["Annulla"].tap()
         }
 
@@ -64,7 +50,7 @@ final class ScreenshotTests: XCTestCase {
         if settings.waitForExistence(timeout: 3) {
             settings.tap()
             sleep(1)
-            snapshot("08-Impostazioni")
+            snapshot("07-Impostazioni")
         }
 
         let finance = app.buttons["Centro finanziario"]
@@ -74,12 +60,12 @@ final class ScreenshotTests: XCTestCase {
             if budgets.waitForExistence(timeout: 3) {
                 budgets.tap()
                 sleep(1)
-                snapshot("09-Budget")
+                snapshot("08-Budget")
                 let row = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Alimentari")).firstMatch
                 if row.waitForExistence(timeout: 2) {
                     row.tap()
                     sleep(1)
-                    snapshot("10-Modifica-budget")
+                    snapshot("09-Modifica-budget")
                     app.buttons["Annulla"].firstMatch.tap()
                 }
                 app.navigationBars.buttons.firstMatch.tap()
@@ -88,7 +74,7 @@ final class ScreenshotTests: XCTestCase {
             if currencies.waitForExistence(timeout: 3) {
                 currencies.tap()
                 sleep(1)
-                snapshot("11-Valute")
+                snapshot("10-Valute")
                 app.navigationBars.buttons.firstMatch.tap()
             }
             let close = app.buttons["Chiudi"].firstMatch
@@ -100,7 +86,7 @@ final class ScreenshotTests: XCTestCase {
             bankImport.tap()
             if app.navigationBars["Importa dalla banca"].waitForExistence(timeout: 3) {
                 sleep(1)
-                snapshot("12-Import-banca")
+                snapshot("11-Import-banca")
                 app.buttons["Annulla"].firstMatch.tap()
             }
         }

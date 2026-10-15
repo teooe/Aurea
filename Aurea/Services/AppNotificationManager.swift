@@ -17,7 +17,11 @@ enum AppNotificationManager {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
     }
 
+    /// Nei test dell'interfaccia (screenshot compresi) niente notifiche: la richiesta di permesso coprirebbe l'app.
+    static var isUITesting: Bool { ProcessInfo.processInfo.arguments.contains("-UITesting") }
+
     static func refresh(relationships: [Relationship], recurring: [RecurringTransaction], budgets: [Budget], transactions: [Transaction]) {
+        guard !isUITesting else { return }
         requestAuthorization()
         scheduleRelationships(relationships)
         scheduleRecurring(recurring)

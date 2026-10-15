@@ -4,6 +4,7 @@ import UserNotifications
 
 enum AgendaNotificationManager {
     static func requestAuthorization() {
+        guard !AppNotificationManager.isUITesting else { return }
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
     }
 
