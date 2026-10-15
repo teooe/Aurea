@@ -16,6 +16,8 @@ final class Transaction {
     var category: String
     var title: String
     var transferGroupID: UUID?
+    /// Foto dello scontrino (JPEG ridotto). Salvata fuori dal database per non appesantirlo.
+    @Attribute(.externalStorage) var receiptImageData: Data?
 
     var wallet: Wallet?
 

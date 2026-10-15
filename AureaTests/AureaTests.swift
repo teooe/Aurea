@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import SwiftData
+import UIKit
 @testable import Aurea
 
 // Il target dell'app isola i tipi su MainActor per impostazione predefinita: la suite gira lì.
@@ -575,6 +576,44 @@ struct AureaTests {
 
         #expect(status.carriedOver == 0)
         #expect(status.limit == 300)
+    }
+
+    @Test func receiptPhotoIsResizedAndCompressed() throws {
+        let big = UIGraphicsImageRenderer(size: CGSize(width: 3200, height: 1000), format: {
+            let format = UIGraphicsImageRendererFormat(); format.scale = 1; return format
+        }()).image { context in
+            UIColor.white.setFill(); context.fill(CGRect(x: 0, y: 0, width: 3200, height: 1000))
+        }
+
+        let data = try #require(ReceiptImage.jpegData(from: big))
+        let decoded = try #require(UIImage(data: data))
+
+        #expect(max(decoded.size.width, decoded.size.height) == ReceiptImage.maxDimension)
+        #expect(decoded.size.width / decoded.size.height == 3.2)
+    }
+
+    @Test func backupRoundTripKeepsReceiptPhotoAndBudgetOptions() throws {
+        let schema = AureaStore.schema
+        let source = try ModelContainer(for: schema, configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true))
+        let wallet = Wallet(name: "Conto", icon: "wallet.pass")
+        let expense = Transaction(type: .expense, amount: 12, category: "Bar", title: "Colazione", wallet: wallet)
+        expense.receiptImageData = Data([0xFF, 0xD8, 0xFF, 0xD9])
+        source.mainContext.insert(wallet)
+        source.mainContext.insert(expense)
+        source.mainContext.insert(Budget(title: "Bar", category: "Bar", monthlyLimit: 15, period: .weekly, rollover: true))
+        try source.mainContext.save()
+
+        let json = try BackupRestoreService.encode(BackupRestoreService.makePayload(context: source.mainContext))
+        let payload = try BackupRestoreService.decode(Data(json.utf8))
+
+        let target = try ModelContainer(for: schema, configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true))
+        try BackupRestoreService.restore(payload, context: target.mainContext)
+
+        let restored = try target.mainContext.fetch(FetchDescriptor<Transaction>())
+        #expect(restored.first?.receiptImageData == Data([0xFF, 0xD8, 0xFF, 0xD9]))
+        let budget = try #require(try target.mainContext.fetch(FetchDescriptor<Budget>()).first)
+        #expect(budget.period == .weekly)
+        #expect(budget.rollover)
     }
 
     @Test func relationshipRemainingAmountNeverBecomesNegative() {

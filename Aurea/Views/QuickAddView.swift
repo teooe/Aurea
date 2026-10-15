@@ -42,6 +42,9 @@ struct QuickAddView: View {
     @State private var photoItem: PhotosPickerItem?
     @State private var isReadingReceipt = false
     @State private var receiptNote: String?
+    /// Foto letta dallo scontrino: se `attachReceipt` è attivo viene salvata con il movimento.
+    @State private var receiptImage: UIImage?
+    @State private var attachReceipt = true
 
     /// Con un precompilato la data resta "adesso": ripetere significa registrare di nuovo oggi.
     init(prefill: QuickAddPrefill? = nil) {
@@ -122,6 +125,16 @@ struct QuickAddView: View {
                             Text(receiptNote)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                        }
+                        if let receiptImage {
+                            HStack(spacing: 12) {
+                                Image(uiImage: receiptImage)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 44, height: 56)
+                                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                                Toggle("Allega la foto al movimento", isOn: $attachReceipt)
+                            }
                         }
                     }
                 }
@@ -257,6 +270,8 @@ struct QuickAddView: View {
     /// Legge lo scontrino e precompila importo, data e descrizione. Non salva: l'utente controlla prima.
     private func readReceipt(_ images: [UIImage]) {
         guard !images.isEmpty else { return }
+        receiptImage = images.first
+        attachReceipt = true
         isReadingReceipt = true
         receiptNote = nil
         amountFocused = false
@@ -361,6 +376,9 @@ struct QuickAddView: View {
             let resolvedCategory = CategoryService.resolve(trimmedCategory, type: type, in: modelContext)
             let cleanTitle = trimmedTitle.isEmpty ? resolvedCategory : trimmedTitle
             let transaction = Transaction(type: type, amount: decimalAmount, date: date, category: resolvedCategory, title: cleanTitle, wallet: wallet)
+            if type == .expense, attachReceipt, let receiptImage {
+                transaction.receiptImageData = ReceiptImage.jpegData(from: receiptImage)
+            }
             modelContext.insert(transaction)
             let kind = type == .income ? "Entrata registrata" : "Spesa registrata"
             let value = decimalAmount.formatted(.currency(code: wallet.currencyCode))

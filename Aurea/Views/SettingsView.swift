@@ -122,7 +122,7 @@ struct SettingsView: View {
                         Label("Ripristina backup", systemImage: "arrow.counterclockwise.circle")
                     }
                 } header: { Text("Esportazione e backup") }
-                footer: { Text("Il backup completo include portafogli, movimenti, agenda, obiettivi, debiti/crediti, budget, ricorrenti e categorie. Il ripristino sostituisce i dati presenti dopo una conferma esplicita.") }
+                footer: { Text("Il backup completo include portafogli, movimenti con le foto degli scontrini, agenda, obiettivi, debiti/crediti, budget, ricorrenti e categorie. Il ripristino sostituisce i dati presenti dopo una conferma esplicita.") }
 
                 Section {
                     Button { showingOnboarding = true } label: { Label("Rivedi introduzione", systemImage: "play.rectangle") }

@@ -1,5 +1,7 @@
-import SwiftUI
+import PhotosUI
 import SwiftData
+import SwiftUI
+import UIKit
 
 struct TransactionDetailView: View {
     @Environment(\.dismiss) private var dismiss
@@ -11,6 +13,15 @@ struct TransactionDetailView: View {
     @State private var showingDeleteConfirmation = false
     @State private var showingEdit = false
     @State private var showingRepeat = false
+    @State private var showingReceipt = false
+    @State private var showingScanner = false
+    @State private var showingPhotoPicker = false
+    @State private var photoItem: PhotosPickerItem?
+    @State private var showingRemoveReceipt = false
+
+    private var receiptImage: UIImage? {
+        transaction.receiptImageData.flatMap(UIImage.init(data:))
+    }
 
     private var isTransfer: Bool {
         transaction.isTransfer
@@ -47,6 +58,8 @@ struct TransactionDetailView: View {
                         }
                     }
                 } else {
+                    receiptSection
+
                     Section {
                         Button { showingEdit = true } label: {
                             Label("Modifica movimento", systemImage: "pencil")
@@ -62,6 +75,32 @@ struct TransactionDetailView: View {
                         }
                     }
                 }
+            }
+            .sheet(isPresented: $showingReceipt) {
+                if let receiptImage { ReceiptImageViewer(image: receiptImage) }
+            }
+            .fullScreenCover(isPresented: $showingScanner) {
+                DocumentScannerView { images in
+                    showingScanner = false
+                    if let image = images.first { attach(image) }
+                } onCancel: {
+                    showingScanner = false
+                }
+                .ignoresSafeArea()
+            }
+            .photosPicker(isPresented: $showingPhotoPicker, selection: $photoItem, matching: .images)
+            .onChange(of: photoItem) { _, item in
+                guard let item else { return }
+                photoItem = nil
+                Task {
+                    if let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) {
+                        attach(image)
+                    }
+                }
+            }
+            .confirmationDialog("Rimuovere la foto dello scontrino?", isPresented: $showingRemoveReceipt, titleVisibility: .visible) {
+                Button("Rimuovi foto", role: .destructive) { transaction.receiptImageData = nil }
+                Button("Annulla", role: .cancel) { }
             }
             .navigationTitle("Dettaglio movimento")
             .navigationBarTitleDisplayMode(.inline)
@@ -79,6 +118,41 @@ struct TransactionDetailView: View {
                 Button("Annulla", role: .cancel) { }
             }
         }
+    }
+
+    @ViewBuilder private var receiptSection: some View {
+        Section("Scontrino") {
+            if let receiptImage {
+                Button { showingReceipt = true } label: {
+                    HStack(spacing: 12) {
+                        Image(uiImage: receiptImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 60, height: 80)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        Text("Vedi la foto")
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                Button("Rimuovi foto", role: .destructive) { showingRemoveReceipt = true }
+            } else {
+                Menu {
+                    if DocumentScannerView.isSupported {
+                        Button("Scatta foto", systemImage: "camera") { showingScanner = true }
+                    }
+                    Button("Scegli dalla libreria", systemImage: "photo.on.rectangle") { showingPhotoPicker = true }
+                } label: {
+                    Label("Aggiungi la foto dello scontrino", systemImage: "doc.text.image")
+                }
+            }
+        }
+    }
+
+    private func attach(_ image: UIImage) {
+        transaction.receiptImageData = ReceiptImage.jpegData(from: image)
     }
 
     private func deleteMovement() {
