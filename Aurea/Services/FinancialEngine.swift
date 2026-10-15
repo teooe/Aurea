@@ -57,6 +57,19 @@ enum FinancialEngine {
             .reduce(Decimal.zero) { $0 + amountInEUR(for: $1) }
     }
 
+    /// Spese (in EUR, senza trasferimenti) degli ultimi `months` mesi, dal più vecchio al corrente.
+    static func monthlyExpenses(from transactions: [Transaction], months: Int = 6, now: Date = .now, calendar: Calendar = .current) -> [(monthStart: Date, total: Decimal)] {
+        guard months > 0, let current = calendar.dateInterval(of: .month, for: now)?.start else { return [] }
+        let starts = (0..<months).reversed().compactMap { calendar.date(byAdding: .month, value: -$0, to: current) }
+        var totals: [Date: Decimal] = [:]
+        for transaction in transactions where transaction.type == .expense && !transaction.isTransfer {
+            guard let start = calendar.dateInterval(of: .month, for: transaction.date)?.start,
+                  start >= (starts.first ?? current), start <= current else { continue }
+            totals[start, default: 0] += amountInEUR(for: transaction)
+        }
+        return starts.map { (monthStart: $0, total: totals[$0] ?? 0) }
+    }
+
     /// Quanto si può spendere al giorno, da oggi a fine mese compresi, per restare nel limite.
     /// Zero se il budget è già esaurito. Arrotondato per difetto al centesimo, per non superarlo.
     static func dailyAllowance(limit: Decimal, spent: Decimal, now: Date = .now, calendar: Calendar = .current) -> Decimal {

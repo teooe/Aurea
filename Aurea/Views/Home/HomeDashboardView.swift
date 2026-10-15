@@ -51,6 +51,7 @@ struct HomeDashboardView: View {
                 header
                 NetWorthCardView(totalNetWorth: totalNetWorth, wallets: activeWallets, monthlyTransactions: monthlyTransactions, transactionCount: transactions.count, isExpanded: expandedCard == .netWorth) { toggleCard(.netWorth) }
                 financialPulseCard
+                SpendingTrendCardView(points: FinancialEngine.monthlyExpenses(from: transactions)) { showingReports = true }
                 smartAlerts
                 TodayCardView(transactions: todayTransactions, isExpanded: expandedCard == .today) { toggleCard(.today) } onSelectTransaction: { selectedTransaction = $0 } onShowAll: { showingTransactions = true }
                 WalletsCardView(wallets: activeWallets, isExpanded: expandedCard == .wallets) { toggleCard(.wallets) } onAddWallet: { showingAddWallet = true } onSelectWallet: { selectedWallet = $0 }

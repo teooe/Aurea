@@ -505,6 +505,23 @@ struct AureaTests {
         #expect(FinancialEngine.dailyAllowance(limit: 100, spent: 150, now: sept25, calendar: calendar) == 0)
     }
 
+    @Test func monthlyExpensesCoverLastMonthsInOrder() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 15))!
+        let items = [
+            Transaction(type: .expense, amount: 100, date: calendar.date(from: DateComponents(year: 2026, month: 10, day: 2))!, category: "Casa", title: "Ottobre"),
+            Transaction(type: .expense, amount: 40, date: calendar.date(from: DateComponents(year: 2026, month: 8, day: 20))!, category: "Svago", title: "Agosto"),
+            Transaction(type: .expense, amount: 999, date: calendar.date(from: DateComponents(year: 2026, month: 3, day: 1))!, category: "Casa", title: "Troppo vecchio"),
+            Transaction(type: .income, amount: 500, date: now, category: "Stipendio", title: "Entrata"),
+            Transaction(type: .expense, amount: 70, date: now, category: Transaction.transferCategory, title: "Giroconto", transferGroupID: UUID()),
+        ]
+
+        let points = FinancialEngine.monthlyExpenses(from: items, months: 3, now: now, calendar: calendar)
+
+        #expect(points.map { calendar.component(.month, from: $0.monthStart) } == [8, 9, 10])
+        #expect(points.map(\.total) == [40, 0, 100])
+    }
+
     @Test func relationshipRemainingAmountNeverBecomesNegative() {
         let relationship = Relationship(personName: "Luca", amount: 100, type: .debt, paidAmount: 40)
         #expect(relationship.remainingAmount == 60)
