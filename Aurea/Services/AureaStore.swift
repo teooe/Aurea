@@ -17,9 +17,19 @@ enum AureaStore {
     ])
 
     static let container: ModelContainer = {
-        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+        #if DEBUG
+        // Con -DemoData (solo build Debug) si lavora in memoria su dati di esempio: il database vero non viene aperto.
+        let inMemory = DemoData.isEnabled
+        #else
+        let inMemory = false
+        #endif
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory)
         do {
-            return try ModelContainer(for: schema, configurations: [configuration])
+            let container = try ModelContainer(for: schema, configurations: [configuration])
+            #if DEBUG
+            if inMemory { DemoData.seed(in: container.mainContext) }
+            #endif
+            return container
         } catch {
             fatalError("Could not create ModelContainer: \(error)")
         }
