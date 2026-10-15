@@ -14,7 +14,8 @@ final class ScreenshotTests: XCTestCase {
         app.launchArguments = ["-UITesting", "-DemoData", "-AppleLanguages", "(it)", "-AppleLocale", "it_IT"]
         app.launch()
 
-        XCTAssertTrue(app.tabBars.buttons["Home"].waitForExistence(timeout: 10))
+        // I runner di GitHub a volte impiegano più di un minuto ad avviare l'app la prima volta.
+        XCTAssertTrue(app.tabBars.buttons["Home"].waitForExistence(timeout: 90))
         sleep(1)
         snapshot("01-Home")
 
