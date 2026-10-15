@@ -31,11 +31,11 @@ final class ScreenshotTests: XCTestCase {
         snapshot("04-Analisi")
 
         let report = app.buttons["Report completo"]
-        if report.waitForExistence(timeout: 3) {
+        if reveal(report, in: app) {
             report.tap()
             sleep(2)
             snapshot("05-Report")
-            app.navigationBars.buttons.firstMatch.tap()
+            tapVisible(app.navigationBars.buttons)
         }
 
         app.tabBars.buttons["Aggiungi"].tap()
@@ -61,21 +61,22 @@ final class ScreenshotTests: XCTestCase {
                 budgets.tap()
                 sleep(1)
                 snapshot("08-Budget")
-                let row = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Alimentari")).firstMatch
-                if row.waitForExistence(timeout: 2) {
+                // La Home resta sotto il foglio e ha anch'essa righe "Alimentari": serve quella visibile.
+                let rows = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Alimentari"))
+                if let row = rows.allElementsBoundByIndex.first(where: { $0.isHittable }) {
                     row.tap()
                     sleep(1)
                     snapshot("09-Modifica-budget")
-                    app.buttons["Annulla"].firstMatch.tap()
+                    tapVisible(app.buttons.matching(identifier: "Annulla"))
                 }
-                app.navigationBars.buttons.firstMatch.tap()
+                tapVisible(app.navigationBars.buttons)
             }
             let currencies = app.buttons["Valute e cambi"].firstMatch
             if currencies.waitForExistence(timeout: 3) {
                 currencies.tap()
                 sleep(1)
                 snapshot("10-Valute")
-                app.navigationBars.buttons.firstMatch.tap()
+                tapVisible(app.navigationBars.buttons)
             }
             let close = app.buttons["Chiudi"].firstMatch
             if close.waitForExistence(timeout: 2) { close.tap() }
@@ -87,9 +88,16 @@ final class ScreenshotTests: XCTestCase {
             if app.navigationBars["Importa dalla banca"].waitForExistence(timeout: 3) {
                 sleep(1)
                 snapshot("11-Import-banca")
-                app.buttons["Annulla"].firstMatch.tap()
+                tapVisible(app.buttons.matching(identifier: "Annulla"))
             }
         }
+    }
+
+    /// Tocca il primo elemento davvero visibile: sotto un foglio restano elementi con lo stesso nome.
+    @MainActor
+    private func tapVisible(_ query: XCUIElementQuery) {
+        query.allElementsBoundByIndex.first(where: { $0.isHittable })?.tap()
+        sleep(1)
     }
 
     /// Scorre verso il basso finché l'elemento non è visibile e toccabile.
