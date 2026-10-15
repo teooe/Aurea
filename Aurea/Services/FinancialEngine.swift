@@ -4,7 +4,7 @@ import SwiftData
 enum FinancialEngine {
 
     static func balance(for wallet: Wallet) -> Decimal {
-        wallet.transactions.reduce(wallet.initialBalance) { balance, transaction in
+        (wallet.transactions ?? []).reduce(wallet.initialBalance) { balance, transaction in
             switch transaction.type {
             case .income:
                 return balance + transaction.amount

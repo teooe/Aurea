@@ -3,14 +3,14 @@ import SwiftData
 
 @Model
 final class RecurringTransaction {
-    var id: UUID
-    var title: String
-    var amount: Decimal
-    var category: String
-    var typeRawValue: String
-    var frequencyRawValue: String
-    var nextDate: Date
-    var isActive: Bool
+    var id: UUID = UUID()
+    var title: String = ""
+    var amount: Decimal = 0
+    var category: String = ""
+    var typeRawValue: String = ""
+    var frequencyRawValue: String = ""
+    var nextDate: Date = Date.now
+    var isActive: Bool = false
     var wallet: Wallet?
 
     init(title: String, amount: Decimal, category: String, type: TransactionType, frequency: RecurringFrequency, nextDate: Date, wallet: Wallet? = nil, isActive: Bool = true) {

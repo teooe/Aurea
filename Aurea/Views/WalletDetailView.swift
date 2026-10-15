@@ -11,7 +11,7 @@ struct WalletDetailView: View {
     @State private var showingEdit = false
 
     private var transactions: [Transaction] {
-        wallet.transactions.sorted { $0.date > $1.date }
+        (wallet.transactions ?? []).sorted { $0.date > $1.date }
     }
 
     var body: some View {

@@ -3,13 +3,13 @@ import SwiftData
 
 @Model
 final class Budget {
-    var id: UUID
-    var title: String
+    var id: UUID = UUID()
+    var title: String = ""
     var category: String?
     /// Limite per periodo (il nome resta "monthly" per compatibilità con i dati già salvati).
-    var monthlyLimit: Decimal
-    var createdAt: Date
-    var isArchived: Bool
+    var monthlyLimit: Decimal = 0
+    var createdAt: Date = Date.now
+    var isArchived: Bool = false
     /// `nil` per i budget creati prima dei periodi: valgono come mensili.
     var periodRaw: String?
     /// Se attivo, il residuo non speso del periodo precedente si aggiunge al limite.

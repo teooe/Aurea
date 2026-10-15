@@ -23,16 +23,16 @@ enum AgendaPriority: String, Codable, CaseIterable, Identifiable {
 
 @Model
 final class AgendaItem {
-    var title: String
-    var note: String
-    var type: AgendaItemType
-    var date: Date
-    var hasTime: Bool
+    var title: String = ""
+    var note: String = ""
+    var type: AgendaItemType = .task
+    var date: Date = Date.now
+    var hasTime: Bool = false
     var endDate: Date?
-    var isCompleted: Bool
-    var repeatRule: AgendaRepeat
+    var isCompleted: Bool = false
+    var repeatRule: AgendaRepeat = .never
     var reminderMinutesBefore: Int?
-    var createdAt: Date
+    var createdAt: Date = Date.now
     var priorityRaw: String = AgendaPriority.normal.rawValue
 
     var priority: AgendaPriority {

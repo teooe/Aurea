@@ -3,14 +3,14 @@ import SwiftData
 
 @Model
 final class Goal {
-    var id: UUID
-    var title: String
-    var typeRawValue: String
+    var id: UUID = UUID()
+    var title: String = ""
+    var typeRawValue: String = ""
     var targetAmount: Decimal?
-    var currentAmount: Decimal
+    var currentAmount: Decimal = 0
     var targetDate: Date?
-    var createdAt: Date
-    var isCompleted: Bool
+    var createdAt: Date = Date.now
+    var isCompleted: Bool = false
     var linkedWallet: Wallet?
 
     init(

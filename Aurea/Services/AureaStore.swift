@@ -16,6 +16,25 @@ enum AureaStore {
         AgendaItem.self,
     ])
 
+    /// Preferenza "Sincronizza con iCloud": vale dal riavvio successivo dell'app.
+    static let iCloudSyncKey = "aurea.icloud.enabled"
+    static let cloudKitContainerID = "iCloud.com.aurea.Aurea"
+
+    /// La sincronizzazione richiede la capability iCloud, possibile solo con un account sviluppatore
+    /// a pagamento. Finché non si aggiunge `AUREA_ICLOUD` alle condizioni di compilazione
+    /// (vedi docs/iCloud.md) l'opzione resta spenta e l'archivio è solo sul dispositivo.
+    static var isCloudSyncAvailable: Bool {
+        #if AUREA_ICLOUD
+        return true
+        #else
+        return false
+        #endif
+    }
+
+    static var isCloudSyncActive: Bool {
+        isCloudSyncAvailable && UserDefaults.standard.bool(forKey: iCloudSyncKey)
+    }
+
     static let container: ModelContainer = {
         #if DEBUG
         // Con -DemoData (solo build Debug) si lavora in memoria su dati di esempio: il database vero non viene aperto.
@@ -23,7 +42,9 @@ enum AureaStore {
         #else
         let inMemory = false
         #endif
-        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory)
+        // Esplicito: senza la scelta dell'utente non si usa mai CloudKit, anche se la capability c'è.
+        let cloud: ModelConfiguration.CloudKitDatabase = (isCloudSyncActive && !inMemory) ? .private(cloudKitContainerID) : .none
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory, cloudKitDatabase: cloud)
         do {
             let container = try ModelContainer(for: schema, configurations: [configuration])
             #if DEBUG
