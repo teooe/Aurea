@@ -10,13 +10,10 @@ enum WidgetSnapshotBuilder {
         let today = month.filter { calendar.isDate($0.date, inSameDayAs: now) }
 
         let budgetLines = budgets
-            .filter { !$0.isArchived && $0.monthlyLimit > 0 }
+            .filter { !$0.isArchived && $0.limit > 0 }
             .map { budget in
-                WidgetSnapshot.BudgetLine(
-                    title: budget.title,
-                    spent: FinancialEngine.spentThisMonth(for: budget, transactions: month, calendar: calendar),
-                    limit: budget.monthlyLimit
-                )
+                let status = BudgetEngine.status(for: budget, transactions: transactions, now: now, calendar: calendar)
+                return WidgetSnapshot.BudgetLine(title: budget.title, spent: status.spent, limit: status.limit)
             }
             .sorted { $0.ratio > $1.ratio }
 

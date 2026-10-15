@@ -29,15 +29,12 @@ struct HomeDashboardView: View {
     private var monthIncome: Decimal { monthlyTransactions.filter { $0.type == .income && !$0.isTransfer }.reduce(0) { $0 + valueInEUR($1) } }
     private var monthBalance: Decimal { monthIncome - monthExpenses }
     private var activeBudgets: [Budget] { budgets.filter { !$0.isArchived } }
-    /// Budget attivi dal più vicino al limite, con quanto è già stato speso questo mese.
+    /// Budget attivi dal più vicino al limite, nel loro periodo corrente (mese o settimana).
     private var budgetProgress: [HomeBudgetProgress] {
         activeBudgets
-            .map { budget in
-                let spent = FinancialEngine.spentThisMonth(for: budget, transactions: transactions)
-                let ratio = budget.monthlyLimit > 0 ? decimalDouble(spent / budget.monthlyLimit) : 0
-                return HomeBudgetProgress(budget: budget, spent: spent, ratio: ratio)
-            }
-            .sorted { $0.ratio > $1.ratio }
+            .filter { $0.limit > 0 }
+            .map { HomeBudgetProgress(budget: $0, status: BudgetEngine.status(for: $0, transactions: transactions)) }
+            .sorted { $0.status.ratio > $1.status.ratio }
     }
     private var activeRecurring: [RecurringTransaction] { recurringTransactions.filter { $0.isActive } }
     private var upcomingRecurring: [RecurringTransaction] { activeRecurring.filter { $0.nextDate >= Calendar.current.startOfDay(for: .now) }.sorted { $0.nextDate < $1.nextDate } }
@@ -124,7 +121,7 @@ struct HomeDashboardView: View {
                     Button { showingFinanceCenter = true } label: {
                         VStack(spacing: 10) {
                             ForEach(budgetProgress.prefix(3)) { item in
-                                budgetRow(item.budget, spent: item.spent, ratio: item.ratio)
+                                budgetRow(item.budget, status: item.status)
                             }
                             if budgetProgress.count > 3 {
                                 Text("+ \(budgetProgress.count - 3) altri budget")
@@ -185,21 +182,25 @@ struct HomeDashboardView: View {
         }.buttonStyle(.plain)
     }
 
-    private func budgetRow(_ budget: Budget, spent: Decimal, ratio: Double) -> some View {
+    private func budgetRow(_ budget: Budget, status: BudgetStatus) -> some View {
+        let ratio = status.ratio
         let tint: Color = ratio >= 1 ? .red : (ratio >= 0.8 ? .orange : .accentColor)
-        let perDay = FinancialEngine.dailyAllowance(limit: budget.monthlyLimit, spent: spent)
+        let perDay = BudgetEngine.dailyAllowance(for: status)
         return VStack(alignment: .leading, spacing: 5) {
             HStack {
                 Text(budget.title).font(.subheadline.weight(.medium)).lineLimit(1)
+                if budget.period == .weekly {
+                    Text("settimana").font(.caption2).foregroundStyle(.secondary)
+                }
                 Spacer()
-                Text("\(spent.formatted(.currency(code: "EUR"))) / \(budget.monthlyLimit.formatted(.currency(code: "EUR")))")
+                Text("\(status.spent.formatted(.currency(code: "EUR"))) / \(status.limit.formatted(.currency(code: "EUR")))")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(ratio >= 1 ? .red : .secondary)
             }
             ProgressView(value: min(max(ratio, 0), 1))
                 .tint(tint)
-            Text(ratio >= 1
-                 ? "Superato di \((spent - budget.monthlyLimit).formatted(.currency(code: "EUR")))"
+            Text(status.isOver
+                 ? "Superato di \((status.spent - status.limit).formatted(.currency(code: "EUR")))"
                  : "Puoi spendere \(perDay.formatted(.currency(code: "EUR"))) al giorno")
                 .font(.caption2)
                 .foregroundStyle(ratio >= 1 ? .red : .secondary)
@@ -226,9 +227,8 @@ struct HomeDashboardView: View {
 
     private var budgetWarning: HomeAlertRow? {
         for item in budgetProgress {
-            let (budget, spent, ratio) = (item.budget, item.spent, item.ratio)
-            guard budget.monthlyLimit > 0 else { continue }
-            if ratio >= 1 { return HomeAlertRow(icon: "exclamationmark.octagon", title: "Budget superato", detail: "\(budget.title): \(spent.formatted(.currency(code: "EUR"))) su \(budget.monthlyLimit.formatted(.currency(code: "EUR"))).") }
+            let (budget, spent, ratio) = (item.budget, item.status.spent, item.status.ratio)
+            if ratio >= 1 { return HomeAlertRow(icon: "exclamationmark.octagon", title: "Budget superato", detail: "\(budget.title): \(spent.formatted(.currency(code: "EUR"))) su \(item.status.limit.formatted(.currency(code: "EUR"))).") }
             if ratio >= 0.8 { return HomeAlertRow(icon: "gauge.with.dots.needle.67percent", title: "Budget quasi esaurito", detail: "\(budget.title) è all'\(Int(ratio * 100))%.") }
         }
         return nil
@@ -242,8 +242,7 @@ struct HomeDashboardView: View {
 
 private struct HomeBudgetProgress: Identifiable {
     let budget: Budget
-    let spent: Decimal
-    let ratio: Double
+    let status: BudgetStatus
     var id: UUID { budget.id }
 }
 

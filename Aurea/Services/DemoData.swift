@@ -60,7 +60,9 @@ enum DemoData {
             context.insert(Transaction(type: .income, amount: 100, date: when, category: Transaction.transferCategory, title: "Prelievo ← Conto corrente", wallet: cash, transferGroupID: group))
         }
 
-        context.insert(Budget(title: "Alimentari", category: "Alimentari", monthlyLimit: 300))
+        context.insert(Budget(title: "Alimentari", category: "Alimentari", monthlyLimit: 300, rollover: true,
+                              createdAt: calendar.date(byAdding: .month, value: -2, to: now) ?? now))
+        context.insert(Budget(title: "Bar e caffè", category: "Bar", monthlyLimit: 15, period: .weekly))
         context.insert(Budget(title: "Svago", category: "Svago", monthlyLimit: 120))
         context.insert(Budget(title: "Spese del mese", monthlyLimit: 1400))
 

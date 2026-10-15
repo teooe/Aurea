@@ -522,6 +522,61 @@ struct AureaTests {
         #expect(points.map(\.total) == [40, 0, 100])
     }
 
+    @Test func weeklyBudgetUsesMondayToSundayWeek() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.firstWeekday = 1 // anche con un telefono "americano" la settimana parte di lunedì
+        let thursday = calendar.date(from: DateComponents(year: 2026, month: 10, day: 15, hour: 12))!
+        let monday = calendar.date(from: DateComponents(year: 2026, month: 10, day: 12, hour: 9))!
+        let previousSunday = calendar.date(from: DateComponents(year: 2026, month: 10, day: 11, hour: 20))!
+        let budget = Budget(title: "Bar", category: "Bar", monthlyLimit: 15, period: .weekly, createdAt: monday)
+        let items = [
+            Transaction(type: .expense, amount: 4, date: monday, category: "Bar", title: "Caffè"),
+            Transaction(type: .expense, amount: 6, date: previousSunday, category: "Bar", title: "Domenica scorsa"),
+        ]
+
+        let status = BudgetEngine.status(for: budget, transactions: items, now: thursday, calendar: calendar)
+
+        #expect(calendar.component(.weekday, from: status.interval.start) == 2)
+        #expect(status.spent == 4)
+        #expect(status.limit == 15)
+        // Giovedì → domenica: 4 giorni, 11 € rimasti.
+        #expect(BudgetEngine.dailyAllowance(for: status, now: thursday, calendar: calendar) == Decimal(string: "2.75")!)
+    }
+
+    @Test func rolloverAddsOnlyLastPeriodUnspentAmount() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 15))!
+        let created = calendar.date(from: DateComponents(year: 2026, month: 8, day: 1))!
+        let budget = Budget(title: "Spesa", category: "Alimentari", monthlyLimit: 300, rollover: true, createdAt: created)
+        let items = [
+            Transaction(type: .expense, amount: 250, date: calendar.date(from: DateComponents(year: 2026, month: 9, day: 10))!, category: "Alimentari", title: "Settembre"),
+            Transaction(type: .expense, amount: 100, date: calendar.date(from: DateComponents(year: 2026, month: 8, day: 10))!, category: "Alimentari", title: "Agosto"),
+            Transaction(type: .expense, amount: 80, date: calendar.date(from: DateComponents(year: 2026, month: 10, day: 5))!, category: "Alimentari", title: "Ottobre"),
+        ]
+
+        let status = BudgetEngine.status(for: budget, transactions: items, now: now, calendar: calendar)
+
+        // Riporta i 50 € avanzati a settembre, non quelli di agosto.
+        #expect(status.carriedOver == 50)
+        #expect(status.limit == 350)
+        #expect(status.spent == 80)
+
+        // Uno sforamento non riduce il limite successivo.
+        let overspent = [Transaction(type: .expense, amount: 400, date: calendar.date(from: DateComponents(year: 2026, month: 9, day: 10))!, category: "Alimentari", title: "Troppo")]
+        #expect(BudgetEngine.status(for: budget, transactions: overspent, now: now, calendar: calendar).limit == 300)
+    }
+
+    @Test func rolloverIgnoresPeriodsBeforeTheBudgetExisted() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 15))!
+        let budget = Budget(title: "Nuovo", monthlyLimit: 300, rollover: true, createdAt: calendar.date(from: DateComponents(year: 2026, month: 10, day: 3))!)
+
+        let status = BudgetEngine.status(for: budget, transactions: [], now: now, calendar: calendar)
+
+        #expect(status.carriedOver == 0)
+        #expect(status.limit == 300)
+    }
+
     @Test func relationshipRemainingAmountNeverBecomesNegative() {
         let relationship = Relationship(personName: "Luca", amount: 100, type: .debt, paidAmount: 40)
         #expect(relationship.remainingAmount == 60)
