@@ -9,6 +9,9 @@ concurrency:
   group: screenshots-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   screenshots:
     name: Screenshot sul simulatore iPhone
@@ -60,3 +63,35 @@ jobs:
           name: screenshots
           path: screenshots
           if-no-files-found: warn
+
+      - name: Pubblica gli screenshot sul branch "screenshots"
+        if: always()
+        run: |
+          shopt -s nullglob
+          files=(screenshots/*.png)
+          [ ${#files[@]} -gt 0 ] || { echo "Nessuno screenshot"; exit 0; }
+          mkdir -p publish
+          # Nomi leggibili dal manifest dei test, immagini ridotte per stare leggere nel repository.
+          python3 - <<'PY'
+          import json, os, re, shutil
+          src, dst = "screenshots", "publish"
+          names = {}
+          if os.path.exists(f"{src}/manifest.json"):
+              for test in json.load(open(f"{src}/manifest.json")):
+                  for att in test.get("attachments", []):
+                      names[att["exportedFileName"]] = att.get("suggestedHumanReadableName", att["exportedFileName"])
+          for f in os.listdir(src):
+              if f.endswith(".png"):
+                  name = re.sub(r"_\d+_[0-9A-F-]+", "", names.get(f, f))
+                  name = re.sub(r"[^A-Za-z0-9._-]", "-", name)
+                  if not name.endswith(".png"): name += ".png"
+                  shutil.copy(f"{src}/{f}", f"{dst}/{name}")
+          PY
+          for f in publish/*.png; do sips -Z 1200 "$f" >/dev/null; done
+          ls -la publish
+          cd publish
+          git init -q
+          git checkout -q -b screenshots
+          git add .
+          git -c user.name="github-actions" -c user.email="actions@github.com" commit -q -m "Screenshot di ${GITHUB_SHA::7}"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" screenshots
