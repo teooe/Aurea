@@ -648,6 +648,83 @@ struct AureaTests {
         #expect(credits.allSatisfy { $0.type == .credit && $0.amount == 20 })
     }
 
+    @Test func bankImportReadsItalianCSVWithPreamble() throws {
+        let csv = """
+        \u{FEFF}Intestatario;Mario Rossi
+        IBAN;IT60X0542811101000000123456
+
+        Data contabile;Data valuta;Descrizione;Importo (EUR)
+        02/10/2026;02/10/2026;PAGAMENTO POS ESSELUNGA MILANO;-62,40
+        05/10/2026;05/10/2026;"BONIFICO A FAVORE DI; STIPENDIO OTTOBRE";1.850,00
+        07/10/2026;08/10/2026;ADDEBITO NETFLIX.COM;-13,99
+        """
+        let table = try #require(BankImport.table(from: csv))
+        let mapping = BankImport.ColumnMapping.guess(header: table.header)
+
+        #expect(table.header == ["Data contabile", "Data valuta", "Descrizione", "Importo (EUR)"])
+        #expect(mapping.date == 0)
+        #expect(mapping.description == 2)
+        #expect(mapping.amount == 3)
+
+        let rows = BankImport.rows(from: table, mapping: mapping, existing: [])
+        #expect(rows.map(\.amount) == [Decimal(string: "-62.40")!, 1850, Decimal(string: "-13.99")!])
+        #expect(rows[1].description == "BONIFICO A FAVORE DI; STIPENDIO OTTOBRE")
+        #expect(rows.map(\.category) == ["Alimentari", "Stipendio", "Svago"])
+    }
+
+    @Test func bankImportHandlesSeparateDebitCreditColumns() throws {
+        let csv = """
+        Data Operazione,Data Valuta,Entrate,Uscite,Descrizione
+        01/10/2026,01/10/2026,,45.00,Rifornimento ENI
+        03/10/2026,03/10/2026,"1,200.50",,Accredito rimborso
+        """
+        let table = try #require(BankImport.table(from: csv))
+        let mapping = BankImport.ColumnMapping.guess(header: table.header)
+
+        #expect(mapping.debit == 3)
+        #expect(mapping.credit == 2)
+        #expect(mapping.amount == nil)
+        let rows = BankImport.rows(from: table, mapping: mapping, existing: [])
+        #expect(rows.map(\.amount) == [-45, Decimal(string: "1200.50")!])
+        #expect(rows.map(\.type) == [.expense, .income])
+    }
+
+    @Test func bankImportParsesAmountsAndDates() {
+        #expect(BankImport.amount(from: "1.234,56") == Decimal(string: "1234.56")!)
+        #expect(BankImport.amount(from: "1,234.56") == Decimal(string: "1234.56")!)
+        #expect(BankImport.amount(from: "-12,50") == Decimal(string: "-12.5")!)
+        #expect(BankImport.amount(from: "€ 8,00") == 8)
+        #expect(BankImport.amount(from: "(15,00)") == -15)
+        #expect(BankImport.amount(from: "1.000") == 1000)
+        #expect(BankImport.amount(from: "") == nil)
+
+        let calendar = Calendar(identifier: .gregorian)
+        let date = BankImport.date(from: "05/10/2026", calendar: calendar)
+        #expect(date.map { calendar.dateComponents([.year, .month, .day, .hour], from: $0) } == DateComponents(year: 2026, month: 10, day: 5, hour: 12))
+        #expect(BankImport.date(from: "2026-10-05 14:32:10", calendar: calendar) != nil)
+        #expect(BankImport.date(from: "ieri", calendar: calendar) == nil)
+    }
+
+    @Test func bankImportSkipsDuplicatesAndLearnsCategories() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let existing = [
+            Transaction(type: .expense, amount: Decimal(string: "62.40")!, date: calendar.date(from: DateComponents(year: 2026, month: 10, day: 1, hour: 18))!, category: "Alimentari", title: "Spesa"),
+            Transaction(type: .expense, amount: 30, date: calendar.date(from: DateComponents(year: 2026, month: 9, day: 1))!, category: "Hobby", title: "Negozio Modellismo Rossi"),
+        ]
+        let csv = """
+        Data;Descrizione;Importo
+        02/10/2026;POS ESSELUNGA;-62,40
+        03/10/2026;MODELLISMO ROSSI SRL;-18,00
+        """
+        let table = try #require(BankImport.table(from: csv))
+        let rows = BankImport.rows(from: table, mapping: .guess(header: table.header), existing: existing, calendar: calendar)
+
+        #expect(rows[0].isDuplicate)
+        #expect(!rows[0].isSelected)
+        #expect(!rows[1].isDuplicate)
+        #expect(rows[1].category == "Hobby") // imparata dallo storico
+    }
+
     @Test func relationshipRemainingAmountNeverBecomesNegative() {
         let relationship = Relationship(personName: "Luca", amount: 100, type: .debt, paidAmount: 40)
         #expect(relationship.remainingAmount == 60)
@@ -688,5 +765,44 @@ struct AureaTests {
         #expect(eur.effectiveExchangeRateToEUR == 1)
         #expect(foreignWithoutRate.effectiveExchangeRateToEUR == 1)
         #expect(foreignWithRate.effectiveExchangeRateToEUR == 1.15)
+    }
+
+    @Test func exchangeRatesAreReadFromECBFeedAndApplied() throws {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <gesmes:Envelope xmlns:gesmes="http://www.gesmes.org/xml/2002-08-01" xmlns="http://www.ecb.int/vocabulary/2002-08-01/eurofxref">
+            <gesmes:subject>Reference rates</gesmes:subject>
+            <Cube>
+                <Cube time='2026-10-14'>
+                    <Cube currency='USD' rate='1.0912'/>
+                    <Cube currency='JPY' rate='162.35'/>
+                    <Cube currency='GBP' rate='0.8500'/>
+                </Cube>
+            </Cube>
+        </gesmes:Envelope>
+        """
+        let rates = try #require(ExchangeRateService.parse(Data(xml.utf8)))
+        #expect(rates.perEUR.count == 3)
+        #expect(rates.perEUR["USD"] == Decimal(string: "1.0912"))
+        let day = try #require(rates.date)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Berlin")!
+        #expect(calendar.dateComponents([.year, .month, .day], from: day) == DateComponents(year: 2026, month: 10, day: 14))
+
+        // 1 GBP = 1 / 0,85 EUR, arrotondato a 6 decimali.
+        #expect(rates.rateToEUR(for: "GBP") == Decimal(string: "1.176471"))
+        #expect(rates.rateToEUR(for: "EUR") == 1)
+        #expect(rates.rateToEUR(for: "CHF") == nil)
+
+        let euro = Wallet(name: "Conto", icon: "wallet.pass")
+        let pounds = Wallet(name: "Londra", icon: "sterlingsign.circle", currencyCode: "GBP", exchangeRateToEUR: 1.1)
+        let francs = Wallet(name: "Svizzera", icon: "francsign.circle", currencyCode: "CHF", exchangeRateToEUR: Decimal(string: "1.05"))
+        #expect(ExchangeRateService.apply(rates, to: [euro, pounds, francs]) == 1)
+        #expect(pounds.exchangeRateToEUR == Decimal(string: "1.176471"))
+        #expect(francs.exchangeRateToEUR == Decimal(string: "1.05"))
+        #expect(euro.exchangeRateToEUR == nil)
+        // Riapplicare gli stessi cambi non cambia nulla.
+        #expect(ExchangeRateService.apply(rates, to: [euro, pounds, francs]) == 0)
+        #expect(ExchangeRateService.parse(Data("<html>errore</html>".utf8)) == nil)
     }
 }

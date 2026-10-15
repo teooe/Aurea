@@ -30,6 +30,7 @@ struct SettingsView: View {
     private let appLock = AppLock.shared
     @State private var showingOnboarding = false
     @State private var showingImporter = false
+    @State private var showingBankImport = false
     @State private var showingRestoreConfirmation = false
     @State private var pendingRestore: BackupRestoreService.Payload?
     @State private var exportItem: ExportItem?
@@ -112,6 +113,9 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Button { showingBankImport = true } label: {
+                        Label("Importa movimenti dalla banca", systemImage: "square.and.arrow.down")
+                    }
                     Button { exportCSV() } label: {
                         Label("Esporta movimenti CSV", systemImage: "tablecells")
                     }
@@ -151,6 +155,7 @@ struct SettingsView: View {
             .sheet(isPresented: $showingQuickAdd) { GlobalQuickAddView() }
             .fullScreenCover(isPresented: $showingOnboarding) { OnboardingView() }
             .sheet(item: $exportItem) { item in ActivityView(activityItems: [item.url]) }
+            .sheet(isPresented: $showingBankImport) { BankImportView() }
             .fileImporter(isPresented: $showingImporter, allowedContentTypes: [.json], allowsMultipleSelection: false) { result in handleImport(result) }
             .confirmationDialog("Ripristinare questo backup?", isPresented: $showingRestoreConfirmation, titleVisibility: .visible) {
                 Button("Sostituisci i dati attuali", role: .destructive) { restorePendingBackup() }

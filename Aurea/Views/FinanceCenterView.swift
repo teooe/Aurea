@@ -501,14 +501,41 @@ private struct AddRecurringView: View {
 }
 
 private struct CurrencySettingsView: View {
+    @Environment(\.modelContext) private var modelContext
     @Query private var wallets: [Wallet]
+    @AppStorage(ExchangeRateService.autoUpdateKey) private var autoUpdate = false
+    @State private var lastUpdate = UserDefaults.standard.object(forKey: ExchangeRateService.lastUpdateKey) as? Date
+    @State private var isUpdating = false
+    @State private var message: String?
+
+    private var hasForeignWallets: Bool { wallets.contains { $0.currencyCode != "EUR" } }
 
     var body: some View {
         List {
             Section {
-                Text("Il patrimonio principale è espresso in EUR. Per portafogli in altre valute inserisci manualmente quanti euro vale 1 unità della valuta.")
+                Text("Il patrimonio principale è espresso in EUR. Per i portafogli in altre valute serve sapere quanti euro vale 1 unità della valuta: puoi scriverlo tu o farlo aggiornare in automatico.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle("Aggiorna i cambi in automatico", isOn: $autoUpdate)
+                Button {
+                    updateNow()
+                } label: {
+                    HStack {
+                        Label("Aggiorna ora", systemImage: "arrow.clockwise")
+                        if isUpdating { Spacer(); ProgressView() }
+                    }
+                }
+                .disabled(isUpdating || !hasForeignWallets)
+                if let message {
+                    Text(message).font(.caption).foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Cambi ufficiali BCE")
+            } footer: {
+                Text(footerText)
             }
 
             ForEach(wallets) { wallet in
@@ -516,6 +543,32 @@ private struct CurrencySettingsView: View {
             }
         }
         .navigationTitle("Valute e cambi")
+        .onChange(of: autoUpdate) { _, enabled in
+            if enabled && hasForeignWallets { updateNow() }
+        }
+    }
+
+    private var footerText: String {
+        var text = "Una volta al giorno, all'apertura dell'app, Aurea scarica i cambi pubblicati dalla Banca Centrale Europea e li applica ai portafogli in valuta estera, sostituendo quelli scritti a mano. Le valute che la BCE non quota restano manuali."
+        if let lastUpdate {
+            text += " Ultimo aggiornamento: \(lastUpdate.formatted(date: .abbreviated, time: .shortened))."
+        }
+        return text
+    }
+
+    private func updateNow() {
+        isUpdating = true
+        message = nil
+        Task {
+            do {
+                let changed = try await ExchangeRateService.update(in: modelContext)
+                message = changed == 0 ? "Cambi già aggiornati." : "Aggiornati \(changed) portafogli."
+            } catch {
+                message = "Aggiornamento non riuscito: controlla la connessione e riprova."
+            }
+            lastUpdate = UserDefaults.standard.object(forKey: ExchangeRateService.lastUpdateKey) as? Date
+            isUpdating = false
+        }
     }
 }
 
@@ -541,8 +594,8 @@ private struct CurrencyRateRow: View {
                     .font(.caption)
             }
         }
-        .onAppear {
-            if let rate = wallet.exchangeRateToEUR {
+        .onChange(of: wallet.exchangeRateToEUR, initial: true) { _, rate in
+            if let rate {
                 rateText = NSDecimalNumber(decimal: rate).stringValue
             }
         }
