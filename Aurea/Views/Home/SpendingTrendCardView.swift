@@ -47,7 +47,7 @@ struct SpendingTrendCardView: View {
 
                         HStack {
                             if let average {
-                                Text("Media \(average.formatted(.currency(code: "EUR").precision(.fractionLength(0))))/mese")
+                                Text("Media mesi passati \(average.formatted(.currency(code: "EUR").precision(.fractionLength(0))))")
                             }
                             Spacer()
                             Text("Report")

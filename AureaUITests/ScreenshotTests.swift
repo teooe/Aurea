@@ -67,7 +67,7 @@ final class ScreenshotTests: XCTestCase {
                     row.tap()
                     sleep(1)
                     snapshot("09-Modifica-budget")
-                    tapVisible(app.buttons.matching(identifier: "Annulla"))
+                    tapVisible(app.buttons.matching(NSPredicate(format: "label == %@", "Annulla")))
                 }
                 tapVisible(app.navigationBars.buttons)
             }
@@ -88,7 +88,7 @@ final class ScreenshotTests: XCTestCase {
             if app.navigationBars["Importa dalla banca"].waitForExistence(timeout: 3) {
                 sleep(1)
                 snapshot("11-Import-banca")
-                tapVisible(app.buttons.matching(identifier: "Annulla"))
+                tapVisible(app.buttons.matching(NSPredicate(format: "label == %@", "Annulla")))
             }
         }
     }
