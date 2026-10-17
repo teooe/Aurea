@@ -767,6 +767,74 @@ struct AureaTests {
         #expect(foreignWithRate.effectiveExchangeRateToEUR == 1.15)
     }
 
+    @Test func monthForecastProjectsVariableSpendingAndAddsUpcomingRecurring() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Rome")!
+        func day(_ d: Int, _ m: Int = 10) -> Date { calendar.date(from: DateComponents(year: 2026, month: m, day: d, hour: 12))! }
+        let now = day(10)
+
+        let rent = RecurringTransaction(title: "Affitto", amount: 650, category: "Casa", type: .expense, frequency: .monthly, nextDate: day(3, 11))
+        let netflix = RecurringTransaction(title: "Netflix", amount: Decimal(string: "13.99")!, category: "Svago", type: .expense, frequency: .monthly, nextDate: day(20))
+        let paused = RecurringTransaction(title: "Palestra", amount: 39, category: "Salute", type: .expense, frequency: .monthly, nextDate: day(15), isActive: false)
+        let transactions = [
+            Transaction(type: .income, amount: 1850, date: day(1), category: "Stipendio", title: "Stipendio"),
+            Transaction(type: .expense, amount: 650, date: day(3), category: "Casa", title: "Affitto"),
+            Transaction(type: .expense, amount: 100, date: day(5), category: "Alimentari", title: "Spesa"),
+            Transaction(type: .expense, amount: 80, date: day(30, 9), category: "Alimentari", title: "Mese scorso"),
+            Transaction(type: .expense, amount: 50, date: day(6), category: Transaction.transferCategory, title: "Prelievo", transferGroupID: UUID()),
+        ]
+
+        let forecast = try #require(ForecastEngine.monthForecast(transactions: transactions, recurring: [rent, netflix, paused], now: now, calendar: calendar))
+        #expect(forecast.daysLeft == 21)
+        #expect(forecast.expensesSoFar == 750)
+        #expect(forecast.upcomingExpenses == Decimal(string: "13.99"))
+        // L'affitto è già pagato e non si ripete: la media giornaliera usa solo i 100 € di spesa (10 €/giorno).
+        #expect(forecast.projectedVariableExpenses == 210)
+        #expect(forecast.projectedExpenses == Decimal(string: "973.99"))
+        #expect(forecast.projectedBalance == Decimal(string: "876.01"))
+
+        // Nei primi giorni del mese la media non è affidabile.
+        #expect(ForecastEngine.monthForecast(transactions: transactions, recurring: [], now: day(2), calendar: calendar) == nil)
+    }
+
+    @Test func applePayPaymentIsRecordedOnceWithGuessedCategoryAndWallet() throws {
+        let container = try ModelContainer(for: AureaStore.schema, configurations: ModelConfiguration(schema: AureaStore.schema, isStoredInMemoryOnly: true))
+        let context = container.mainContext
+        let defaults = try #require(UserDefaults(suiteName: "aurea.tests.applepay"))
+        defaults.removePersistentDomain(forName: "aurea.tests.applepay")
+        let bank = Wallet(name: "Conto corrente", icon: "building.columns")
+        let card = Wallet(name: "Carta", icon: "creditcard")
+        context.insert(bank)
+        context.insert(card)
+        // Storico: "Bar Centrale" è già stato classificato come Bar.
+        context.insert(Transaction(type: .expense, amount: 2, date: .now.addingTimeInterval(-86_400), category: "Bar", title: "Bar Centrale", wallet: bank))
+        let now = Date.now
+
+        guard case .recorded(let coffee) = try PaymentRecorder.record(amountText: "€1,50", merchant: "Bar Centrale", card: "Carta Visa", in: context, defaults: defaults, now: now) else {
+            Issue.record("Il pagamento doveva essere registrato"); return
+        }
+        #expect(coffee.amount == Decimal(string: "1.5"))
+        #expect(coffee.category == "Bar")
+        #expect(coffee.wallet === card)
+
+        // La stessa automazione ripetuta subito dopo non duplica la spesa.
+        guard case .duplicate = try PaymentRecorder.record(amountText: "1.50", merchant: "Bar Centrale", card: "Carta Visa", in: context, defaults: defaults, now: now.addingTimeInterval(30)) else {
+            Issue.record("Il secondo pagamento identico doveva essere ignorato"); return
+        }
+
+        // Carta sconosciuta: si usa il portafoglio scelto in Impostazioni; negozio noto dalle regole.
+        defaults.set("Conto corrente", forKey: PaymentRecorder.defaultWalletKey)
+        guard case .recorded(let groceries) = try PaymentRecorder.record(amountText: "23,40 €", merchant: "ESSELUNGA MILANO", card: "Amex", in: context, defaults: defaults, now: now) else {
+            Issue.record("Il pagamento doveva essere registrato"); return
+        }
+        #expect(groceries.wallet === bank)
+        #expect(groceries.category == "Alimentari")
+
+        #expect(throws: IntentError.self) {
+            try PaymentRecorder.record(amountText: "gratis", merchant: nil, card: nil, in: context, defaults: defaults, now: now)
+        }
+    }
+
     @Test func exchangeRatesAreReadFromECBFeedAndApplied() throws {
         let xml = """
         <?xml version="1.0" encoding="UTF-8"?>

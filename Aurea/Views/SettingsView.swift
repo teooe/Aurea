@@ -59,6 +59,11 @@ struct SettingsView: View {
                     Button { showingQuickAdd = true } label: { Label("Aggiungi qualcosa", systemImage: "plus.circle") }
                     navigationButton("Centro finanziario", icon: "chart.pie") { showingFinance = true }
                     navigationButton("Agenda completa", icon: "calendar") { showingAgenda = true }
+                    NavigationLink {
+                        ApplePaySetupView()
+                    } label: {
+                        Label("Spese da Apple Pay", systemImage: "wave.3.right.circle")
+                    }
                 }
 
                 Section {
