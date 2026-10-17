@@ -37,6 +37,12 @@ struct FinanceCenterView: View {
                     }
 
                     NavigationLink {
+                        TagsView()
+                    } label: {
+                        Label("Etichette e viaggi", systemImage: "tag")
+                    }
+
+                    NavigationLink {
                         CurrencySettingsView()
                     } label: {
                         Label("Valute e cambi", systemImage: "eurosign.arrow.circlepath")
@@ -404,10 +410,43 @@ private struct BudgetEditorView: View {
 private struct RecurringTransactionsView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \RecurringTransaction.nextDate) private var recurring: [RecurringTransaction]
+    @Query private var transactions: [Transaction]
+    @Query(sort: \Wallet.name) private var wallets: [Wallet]
+    /// Abbonamenti proposti che l'utente ha scartato (nomi normalizzati, separati da a capo).
+    @AppStorage("aurea.subscriptions.ignored") private var ignoredRaw = ""
     @State private var showingAdd = false
+
+    private var ignored: Set<String> { Set(ignoredRaw.split(separator: "\n").map(String.init)) }
+    private var candidates: [SubscriptionDetector.Candidate] {
+        SubscriptionDetector.candidates(transactions: transactions, recurring: recurring).filter { !ignored.contains($0.key) }
+    }
 
     var body: some View {
         List {
+            let yearly = SubscriptionDetector.yearlyCost(of: recurring)
+            if yearly > 0 {
+                Section {
+                    LabeledContent("Spese ricorrenti in un anno") {
+                        Text(yearly, format: .currency(code: "EUR").precision(.fractionLength(0)))
+                            .fontWeight(.semibold)
+                    }
+                } footer: {
+                    Text("Somma delle spese ricorrenti attive (abbonamenti, affitto, bollette) su dodici mesi.")
+                }
+            }
+
+            if !candidates.isEmpty {
+                Section {
+                    ForEach(candidates) { candidate in
+                        candidateRow(candidate)
+                    }
+                } header: {
+                    Text("Possibili abbonamenti")
+                } footer: {
+                    Text("Spese che tornano ogni mese con lo stesso importo. Aggiungile alle ricorrenti per vederle nelle previsioni e ricevere un promemoria.")
+                }
+            }
+
             Section {
                 Button {
                     generateDueTransactions()
@@ -444,6 +483,35 @@ private struct RecurringTransactionsView: View {
 
     private func generateDueTransactions() {
         RecurringEngine.generateDueTransactions(from: recurring, in: modelContext)
+    }
+
+    private func candidateRow(_ candidate: SubscriptionDetector.Candidate) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(candidate.title).fontWeight(.semibold)
+                Spacer()
+                Text(candidate.amount, format: .currency(code: "EUR"))
+            }
+            Text("\(candidate.category) · \(candidate.months) mesi di fila · \(candidate.yearlyCost.formatted(.currency(code: "EUR").precision(.fractionLength(0)))) l'anno")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack {
+                Button("Aggiungi alle ricorrenti") { addRecurring(from: candidate) }
+                    .buttonStyle(.borderedProminent)
+                Button("Ignora") { ignoredRaw = (ignored.union([candidate.key])).sorted().joined(separator: "\n") }
+                    .buttonStyle(.bordered)
+            }
+            .controlSize(.small)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func addRecurring(from candidate: SubscriptionDetector.Candidate) {
+        let wallet = wallets.first { $0.name == candidate.walletName && !$0.isArchived } ?? wallets.first { !$0.isArchived }
+        // La prossima data è un mese dopo l'ultimo addebito: quello già registrato non viene ripetuto.
+        let next = RecurringFrequency.monthly.nextDate(after: candidate.lastDate)
+        modelContext.insert(RecurringTransaction(title: candidate.title, amount: candidate.amount, category: candidate.category, type: .expense, frequency: .monthly, nextDate: next, wallet: wallet))
+        try? modelContext.save()
     }
 }
 

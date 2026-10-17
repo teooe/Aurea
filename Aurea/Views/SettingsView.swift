@@ -18,6 +18,7 @@ struct SettingsView: View {
     @AppStorage("aurea.notifications.recurring") private var recurringNotifications = true
     @AppStorage("aurea.notifications.budgets") private var budgetNotifications = true
     @AppStorage("aurea.notifications.dailyReminder") private var dailyReminder = false
+    @AppStorage(AppNotificationManager.unusualKey) private var unusualNotifications = true
     @AppStorage("aurea.notifications.dailyReminderMinutes") private var dailyReminderMinutes = 21 * 60
     @AppStorage("aurea.agenda.showCompleted") private var showCompletedAgenda = true
     @AppStorage("aurea.agenda.defaultReminder") private var defaultReminder = 0
@@ -81,6 +82,7 @@ struct SettingsView: View {
                     Toggle("Debiti e crediti", isOn: $relationshipNotifications)
                     Toggle("Movimenti ricorrenti", isOn: $recurringNotifications)
                     Toggle("Avvisi budget", isOn: $budgetNotifications)
+                    Toggle("Spese insolite", isOn: $unusualNotifications)
                     Toggle("Promemoria giornaliero", isOn: $dailyReminder)
                     if dailyReminder {
                         DatePicker("Orario", selection: dailyReminderTime, displayedComponents: .hourAndMinute)
@@ -89,7 +91,7 @@ struct SettingsView: View {
                         Label("Aggiorna promemoria", systemImage: "bell.badge")
                     }
                 } header: { Text("Notifiche") }
-                footer: { Text("Le scadenze di debiti/crediti e ricorrenti vengono ricordate il giorno prima. I budget avvisano all'80% e quando vengono superati. Il promemoria giornaliero ti chiede se hai registrato le spese e salta i giorni in cui l'hai già fatto.") }
+                footer: { Text("Le scadenze di debiti/crediti e ricorrenti vengono ricordate il giorno prima. I budget avvisano all'80% e quando vengono superati. Una spesa molto più alta del solito per la sua categoria ti viene segnalata. Il promemoria giornaliero ti chiede se hai registrato le spese e salta i giorni in cui l'hai già fatto.") }
 
                 Section {
                     Picker("Aspetto", selection: appearanceBinding) {

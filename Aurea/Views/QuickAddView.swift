@@ -48,6 +48,7 @@ struct QuickAddView: View {
     @State private var attachReceipt = true
     /// Spesa pagata da te per più persone: la tua quota è spesa, il resto diventa credito.
     @State private var isShared = false
+    @State private var tagsText = ""
     @State private var sharedPeople: [SharedPerson] = [SharedPerson()]
 
     /// Con un precompilato la data resta "adesso": ripetere significa registrare di nuovo oggi.
@@ -199,6 +200,9 @@ struct QuickAddView: View {
                 Section("Dettagli") {
                     TextField("Descrizione (facoltativa)", text: $title)
                     DatePicker("Data", selection: $date)
+                    if type != .transfer {
+                        TagField(text: $tagsText, suggestions: recentTags)
+                    }
 
                     if type != .transfer {
                         if activeWallets.isEmpty {
@@ -378,6 +382,12 @@ struct QuickAddView: View {
         return relationships.map(\.personName).filter { seen.insert($0.lowercased()).inserted }.prefix(6).map { $0 }
     }
 
+    /// Etichette usate di recente, da proporre con un tocco.
+    private var recentTags: [String] {
+        var seen = Set<String>()
+        return transactions.prefix(300).flatMap(\.tags).filter { seen.insert($0.lowercased()).inserted }.prefix(8).map { $0 }
+    }
+
     @ViewBuilder private var splitSection: some View {
         Section {
             Toggle("Spesa condivisa", isOn: $isShared.animation())
@@ -460,11 +470,13 @@ struct QuickAddView: View {
                     date: date, wallet: wallet, in: modelContext
                 )
                 (created.first as? Transaction)?.receiptImageData = receiptData
+                (created.first as? Transaction)?.tags = Transaction.parseTags(tagsText)
                 let mine = ExpenseSplitter.split(total: decimalAmount, otherPeople: sharedNames.count).mine
                 UndoBanner.shared.post(created, message: "Spesa condivisa · \(value) · tua quota \(mine.formatted(.currency(code: wallet.currencyCode)))")
             } else {
                 let transaction = Transaction(type: type, amount: decimalAmount, date: date, category: resolvedCategory, title: cleanTitle, wallet: wallet)
                 transaction.receiptImageData = receiptData
+                transaction.tags = Transaction.parseTags(tagsText)
                 modelContext.insert(transaction)
                 let kind = type == .income ? "Entrata registrata" : "Spesa registrata"
                 UndoBanner.shared.post([transaction], message: "\(kind) · \(value) · \(resolvedCategory)")

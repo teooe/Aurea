@@ -7,6 +7,7 @@ enum AppNotificationManager {
     static let recurringKey = "aurea.notifications.recurring"
     static let budgetKey = "aurea.notifications.budgets"
     static let dailyReminderKey = "aurea.notifications.dailyReminder"
+    static let unusualKey = "aurea.notifications.unusual"
     /// Minuti dalla mezzanotte (21:00 = 1260).
     static let dailyReminderMinutesKey = "aurea.notifications.dailyReminderMinutes"
     static let defaultDailyReminderMinutes = 21 * 60
@@ -26,6 +27,7 @@ enum AppNotificationManager {
         scheduleRelationships(relationships)
         scheduleRecurring(recurring)
         evaluateBudgets(budgets, transactions: transactions)
+        evaluateUnusualSpending(transactions)
         scheduleDailyReminders(transactions: transactions)
     }
 
@@ -100,6 +102,21 @@ enum AppNotificationManager {
             content.sound = .default
             let comps = Calendar.current.dateComponents([.year,.month,.day,.hour,.minute], from: Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: fire) ?? fire)
             center.add(UNNotificationRequest(identifier: "recurring-\(item.id.uuidString)", content: content, trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)))
+        }
+    }
+
+    /// Un avviso per ogni spesa insolita, una volta sola.
+    private static func evaluateUnusualSpending(_ transactions: [Transaction]) {
+        guard UserDefaults.standard.object(forKey: unusualKey) as? Bool ?? true else { return }
+        for finding in UnusualSpendingDetector.findings(in: transactions, days: 2) {
+            let memoryKey = "aurea.unusual.alert.\(finding.transactionID.uuidString)"
+            guard !UserDefaults.standard.bool(forKey: memoryKey) else { continue }
+            UserDefaults.standard.set(true, forKey: memoryKey)
+            let content = UNMutableNotificationContent()
+            content.title = "Spesa insolita"
+            content.body = "\(finding.title): \(finding.amount.formatted(.currency(code: "EUR"))) in \(finding.category). Di solito spendi circa \(finding.typical.formatted(.currency(code: "EUR")))."
+            content.sound = .default
+            UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "unusual-\(finding.transactionID.uuidString)", content: content, trigger: nil))
         }
     }
 

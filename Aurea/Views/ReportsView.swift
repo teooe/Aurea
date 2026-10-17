@@ -5,7 +5,10 @@ import Charts
 struct ReportsView: View {
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \Transaction.date, order: .reverse) private var transactions: [Transaction]
+    @Query private var budgets: [Budget]
     @State private var selectedRange: ReportRange = .sixMonths
+    @State private var exportItem: ExportItem?
+    @State private var exportError: String?
 
     /// Mostra "Fine" quando il report è aperto come foglio a sé.
     var showsDoneButton = false
@@ -125,7 +128,28 @@ struct ReportsView: View {
             if showsDoneButton {
                 ToolbarItem(placement: .confirmationAction) { Button("Fine") { dismiss() } }
             }
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button("Questo mese") { exportPDF(monthOffset: 0) }
+                    Button("Mese scorso") { exportPDF(monthOffset: -1) }
+                } label: {
+                    Label("Esporta PDF", systemImage: "square.and.arrow.up")
+                }
+            }
         }
+        .sheet(item: $exportItem) { item in ActivityView(activityItems: [item.url]) }
+        .alert("Esportazione non riuscita", isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(exportError ?? "")
+        }
+    }
+
+    private func exportPDF(monthOffset: Int) {
+        let month = Calendar.current.date(byAdding: .month, value: monthOffset, to: .now) ?? .now
+        let report = MonthlyReport.make(for: month, transactions: transactions, budgets: budgets)
+        do { exportItem = ExportItem(url: try MonthlyReportPDF.write(report)) }
+        catch { exportError = error.localizedDescription }
     }
 
     private func metric(_ title: String, _ value: Decimal) -> some View {

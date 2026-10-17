@@ -33,6 +33,7 @@ enum InsightsEngine {
         var result: [Insight] = []
         result += budgetInsights(input.budgets, transactions: input.transactions, now: now, calendar: calendar)
         result += paceInsights(input.transactions, now: now, calendar: calendar)
+        result += unusualInsights(input.transactions, now: now, calendar: calendar)
         result += relationshipInsights(input.relationships, now: now, calendar: calendar)
         result += goalInsights(input.goals, now: now, calendar: calendar)
         result += recurringInsights(input.recurring, now: now, calendar: calendar)
@@ -203,6 +204,20 @@ enum InsightsEngine {
         let names = upcoming.prefix(3).map(\.title).joined(separator: ", ")
         let title = upcoming.count == 1 ? "1 pagamento ricorrente in settimana" : "\(upcoming.count) pagamenti ricorrenti in settimana"
         return [Insight(id: "recurring", kind: .info, icon: "repeat", title: title, detail: "\(names): \(euro(total)) in totale.")]
+    }
+
+    // MARK: - Spese insolite
+
+    static func unusualInsights(_ transactions: [Transaction], now: Date, calendar: Calendar) -> [Insight] {
+        UnusualSpendingDetector.findings(in: transactions, now: now, calendar: calendar).prefix(2).map { finding in
+            Insight(
+                id: "unusual-\(finding.transactionID.uuidString)",
+                kind: .warning,
+                icon: "exclamationmark.magnifyingglass",
+                title: "Spesa insolita: \(euro(finding.amount)) in \(finding.category)",
+                detail: "\(finding.title). Di solito in \(finding.category) spendi circa \(euro(finding.typical)) alla volta: controlla che sia corretta."
+            )
+        }
     }
 
     // MARK: - Utilità

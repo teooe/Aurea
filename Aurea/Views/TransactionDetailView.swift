@@ -39,6 +39,9 @@ struct TransactionDetailView: View {
                     if let wallet = transaction.wallet {
                         LabeledContent("Portafoglio", value: wallet.name)
                     }
+                    if !transaction.tags.isEmpty {
+                        LabeledContent("Etichette", value: transaction.tags.joined(separator: ", "))
+                    }
                 }
 
                 if isTransfer {
@@ -193,6 +196,7 @@ private struct EditTransactionView: View {
     @State private var type: TransactionType
     @State private var selectedWallet: Wallet?
     @State private var date: Date
+    @State private var tagsText: String
 
     init(transaction: Transaction) {
         self.transaction = transaction
@@ -202,6 +206,7 @@ private struct EditTransactionView: View {
         _type = State(initialValue: transaction.type)
         _selectedWallet = State(initialValue: transaction.wallet)
         _date = State(initialValue: transaction.date)
+        _tagsText = State(initialValue: transaction.tags.joined(separator: ", "))
     }
 
     private var parsedAmount: Decimal? {
@@ -232,6 +237,7 @@ private struct EditTransactionView: View {
                     TextField("Importo", text: $amount).keyboardType(.decimalPad)
                     TextField("Categoria", text: $category)
                     DatePicker("Data", selection: $date)
+                    TagField(text: $tagsText, suggestions: [])
                 }
 
                 Section("Portafoglio") {
@@ -261,6 +267,7 @@ private struct EditTransactionView: View {
         transaction.type = type
         transaction.wallet = selectedWallet
         transaction.date = date
+        transaction.tags = Transaction.parseTags(tagsText)
         dismiss()
     }
 }
