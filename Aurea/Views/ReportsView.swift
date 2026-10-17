@@ -65,11 +65,15 @@ struct ReportsView: View {
                     ContentUnavailableView("Dati insufficienti", systemImage: "chart.xyaxis.line", description: Text("Aggiungi movimenti in più mesi per vedere l'andamento."))
                 } else {
                     Chart(months) { month in
+                        // Affiancate, non impilate: la colonna non deve sommare entrate e spese.
                         BarMark(x: .value("Mese", month.shortName), y: .value("Entrate", decimalDouble(month.income)))
                             .foregroundStyle(by: .value("Tipo", "Entrate"))
+                            .position(by: .value("Tipo", "Entrate"))
                         BarMark(x: .value("Mese", month.shortName), y: .value("Spese", decimalDouble(month.expenses)))
                             .foregroundStyle(by: .value("Tipo", "Spese"))
+                            .position(by: .value("Tipo", "Spese"))
                     }
+                    .chartForegroundStyleScale(["Entrate": Theme.Colors.income, "Spese": Theme.Colors.expense])
                     .frame(height: 220)
                     .chartLegend(position: .bottom)
                 }
