@@ -3,10 +3,10 @@ import SwiftData
 
 @Model
 final class RelationshipPayment {
-    var id: UUID
-    var relationshipID: UUID
-    var amount: Decimal
-    var date: Date
+    var id: UUID = UUID()
+    var relationshipID: UUID = UUID()
+    var amount: Decimal = 0
+    var date: Date = Date.now
 
     init(relationshipID: UUID, amount: Decimal, date: Date = .now) {
         self.id = UUID()

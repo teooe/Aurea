@@ -1,0 +1,97 @@
+name: Screenshot
+
+on:
+  push:
+    branches: ["claude/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  screenshots:
+    name: Screenshot sul simulatore iPhone
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scegli la versione di Xcode più recente
+        run: |
+          XCODE="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: Avvia il simulatore
+        id: sim
+        run: |
+          ID="$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; ids=[x["udid"] for k,v in sorted(d.items(), reverse=True) if "iOS" in k for x in v if x["name"]=="iPhone 17 Pro"] or [x["udid"] for k,v in sorted(d.items(), reverse=True) if "iOS" in k for x in v if x["name"].startswith("iPhone")]; print(ids[0])')"
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$ID"
+          xcrun simctl bootstatus "$ID" -b
+          # Barra di stato pulita, come negli screenshot dell'App Store.
+          xcrun simctl status_bar "$ID" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
+          xcrun simctl ui "$ID" appearance light
+
+      - name: Esegui il percorso con i dati di esempio
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project Aurea.xcodeproj \
+            -scheme Aurea \
+            -destination "id=${{ steps.sim.outputs.id }}" \
+            -only-testing:AureaUITests/ScreenshotTests \
+            -resultBundlePath Screenshots.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            | tail -40
+
+      - name: Estrai gli screenshot
+        if: always()
+        run: |
+          mkdir -p screenshots
+          xcrun xcresulttool export attachments --path Screenshots.xcresult --output-path screenshots || true
+          ls -la screenshots
+
+      - name: Carica gli screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: screenshots
+          if-no-files-found: warn
+
+      - name: Pubblica gli screenshot sul branch "screenshots"
+        if: always()
+        run: |
+          shopt -s nullglob
+          files=(screenshots/*.png)
+          [ ${#files[@]} -gt 0 ] || { echo "Nessuno screenshot"; exit 0; }
+          mkdir -p publish
+          # Nomi leggibili dal manifest dei test, immagini ridotte per stare leggere nel repository.
+          python3 - <<'PY'
+          import json, os, re, shutil
+          src, dst = "screenshots", "publish"
+          names = {}
+          if os.path.exists(f"{src}/manifest.json"):
+              for test in json.load(open(f"{src}/manifest.json")):
+                  for att in test.get("attachments", []):
+                      names[att["exportedFileName"]] = att.get("suggestedHumanReadableName", att["exportedFileName"])
+          for f in os.listdir(src):
+              if f.endswith(".png"):
+                  name = re.sub(r"_\d+_[0-9A-F-]+", "", names.get(f, f))
+                  name = re.sub(r"[^A-Za-z0-9._-]", "-", name)
+                  if not name.endswith(".png"): name += ".png"
+                  shutil.copy(f"{src}/{f}", f"{dst}/{name}")
+          PY
+          for f in publish/*.png; do sips -Z 1200 "$f" >/dev/null; done
+          ls -la publish
+          cd publish
+          git init -q
+          git checkout -q -b screenshots
+          git add .
+          git -c user.name="github-actions" -c user.email="actions@github.com" commit -q -m "Screenshot di ${GITHUB_SHA::7}"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" screenshots

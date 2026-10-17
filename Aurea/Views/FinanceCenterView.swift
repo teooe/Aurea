@@ -247,6 +247,7 @@ private struct BudgetsView: View {
     @Query(sort: \Budget.createdAt, order: .reverse) private var budgets: [Budget]
     @Query(sort: \Transaction.date, order: .reverse) private var transactions: [Transaction]
     @State private var showingAdd = false
+    @State private var editingBudget: Budget?
 
     var body: some View {
         List {
@@ -256,40 +257,49 @@ private struct BudgetsView: View {
             }
 
             ForEach(budgets.filter { !$0.isArchived }) { budget in
-                let spent = FinancialEngine.spentThisMonth(for: budget, transactions: transactions)
-                let ratio = NSDecimalNumber(decimal: budget.monthlyLimit > 0 ? spent / budget.monthlyLimit : 0).doubleValue
+                let status = BudgetEngine.status(for: budget, transactions: transactions)
+                let ratio = status.ratio
 
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(budget.title).fontWeight(.semibold)
-                            Text(budget.category ?? "Tutte le spese")
+                Button { editingBudget = budget } label: {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(budget.title).fontWeight(.semibold)
+                                Text(subtitle(for: budget))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text("\(status.spent.formatted(.currency(code: "EUR"))) / \(status.limit.formatted(.currency(code: "EUR")))")
                                 .font(.caption)
+                        }
+
+                        ProgressView(value: min(max(ratio, 0), 1))
+                            .tint(ratio > 1 ? .red : nil)
+
+                        HStack {
+                            if ratio >= 0.8 {
+                                Text(ratio > 1 ? "Budget superato" : "Sei vicino al limite")
+                                    .foregroundStyle(ratio > 1 ? .red : .orange)
+                            }
+                            Spacer()
+                            if ratio < 1 {
+                                let perDay = BudgetEngine.dailyAllowance(for: status)
+                                Text("Restano \(status.remaining.formatted(.currency(code: "EUR"))) · \(perDay.formatted(.currency(code: "EUR")))/giorno")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .font(.caption)
+
+                        if status.carriedOver > 0 {
+                            Label("+\(status.carriedOver.formatted(.currency(code: "EUR"))) riportati dal periodo precedente", systemImage: "arrow.uturn.forward")
+                                .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
-                        Spacer()
-                        Text("\(spent.formatted(.currency(code: "EUR"))) / \(budget.monthlyLimit.formatted(.currency(code: "EUR")))")
-                            .font(.caption)
                     }
-
-                    ProgressView(value: min(max(ratio, 0), 1))
-                        .tint(ratio > 1 ? .red : nil)
-
-                    HStack {
-                        if ratio >= 0.8 {
-                            Text(ratio > 1 ? "Budget superato" : "Sei vicino al limite")
-                                .foregroundStyle(ratio > 1 ? .red : .orange)
-                        }
-                        Spacer()
-                        if ratio < 1 {
-                            let remaining = budget.monthlyLimit - spent
-                            let perDay = FinancialEngine.dailyAllowance(limit: budget.monthlyLimit, spent: spent)
-                            Text("Restano \(remaining.formatted(.currency(code: "EUR"))) · \(perDay.formatted(.currency(code: "EUR")))/giorno")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .font(.caption)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
                 .swipeActions {
                     Button("Archivia") { budget.isArchived = true }
                         .tint(.orange)
@@ -300,46 +310,94 @@ private struct BudgetsView: View {
         .toolbar {
             Button { showingAdd = true } label: { Image(systemName: "plus") }
         }
-        .sheet(isPresented: $showingAdd) { AddBudgetView() }
+        .sheet(isPresented: $showingAdd) { BudgetEditorView(budget: nil) }
+        .sheet(item: $editingBudget) { BudgetEditorView(budget: $0) }
+    }
+
+    private func subtitle(for budget: Budget) -> String {
+        var parts = [budget.category ?? "Tutte le spese", budget.period.title]
+        if budget.rollover { parts.append("con riporto") }
+        return parts.joined(separator: " · ")
     }
 }
 
-private struct AddBudgetView: View {
+/// Crea un budget o, se `budget` è valorizzato, lo modifica.
+private struct BudgetEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \FinanceCategory.name) private var categories: [FinanceCategory]
 
-    @State private var title = ""
-    @State private var amount = ""
-    @State private var selectedCategory = ""
+    let budget: Budget?
+
+    @State private var title: String
+    @State private var amount: String
+    @State private var selectedCategory: String
+    @State private var period: BudgetPeriod
+    @State private var rollover: Bool
+
+    init(budget: Budget?) {
+        self.budget = budget
+        _title = State(initialValue: budget?.title ?? "")
+        _amount = State(initialValue: budget.map { $0.limit.formatted(.number.grouping(.never).locale(Locale(identifier: "it_IT"))) } ?? "")
+        _selectedCategory = State(initialValue: budget?.category ?? "")
+        _period = State(initialValue: budget?.period ?? .monthly)
+        _rollover = State(initialValue: budget?.rollover ?? false)
+    }
 
     private var parsedAmount: Decimal? { Decimal(string: amount.replacingOccurrences(of: ",", with: ".")) }
+    private var trimmedTitle: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Nome budget", text: $title)
-                TextField("Limite mensile", text: $amount).keyboardType(.decimalPad)
-                Picker("Categoria", selection: $selectedCategory) {
-                    Text("Tutte le spese").tag("")
-                    ForEach(categories.filter { $0.type == .expense && !$0.isArchived }) { category in
-                        Text(category.name).tag(category.name)
+                Section {
+                    TextField("Nome budget", text: $title)
+                    TextField(period == .weekly ? "Limite settimanale" : "Limite mensile", text: $amount).keyboardType(.decimalPad)
+                    Picker("Categoria", selection: $selectedCategory) {
+                        Text("Tutte le spese").tag("")
+                        ForEach(categories.filter { $0.type == .expense && !$0.isArchived }) { category in
+                            Text(category.name).tag(category.name)
+                        }
                     }
                 }
+
+                Section {
+                    Picker("Periodo", selection: $period) {
+                        ForEach(BudgetPeriod.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    Toggle("Riporta il residuo", isOn: $rollover)
+                } footer: {
+                    Text(rollover
+                         ? "Quello che non spendi in \(period == .weekly ? "una settimana" : "un mese") si aggiunge al limite di quello successivo. Gli sforamenti non riducono il limite."
+                         : "Le settimane iniziano di lunedì. Con il riporto, il residuo non speso passa al periodo successivo.")
+                }
             }
-            .navigationTitle("Nuovo budget")
+            .navigationTitle(budget == nil ? "Nuovo budget" : "Modifica budget")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Annulla") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Salva") {
-                        guard let parsedAmount, parsedAmount > 0 else { return }
-                        modelContext.insert(Budget(title: title.trimmingCharacters(in: .whitespacesAndNewlines), category: selectedCategory.isEmpty ? nil : selectedCategory, monthlyLimit: parsedAmount))
-                        dismiss()
-                    }
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (parsedAmount ?? 0) <= 0)
+                    Button("Salva") { save() }
+                        .disabled(trimmedTitle.isEmpty || (parsedAmount ?? 0) <= 0)
                 }
             }
         }
+    }
+
+    private func save() {
+        guard let parsedAmount, parsedAmount > 0 else { return }
+        let category = selectedCategory.isEmpty ? nil : selectedCategory
+        if let budget {
+            budget.title = trimmedTitle
+            budget.monthlyLimit = parsedAmount
+            budget.category = category
+            budget.period = period
+            budget.rollover = rollover
+        } else {
+            modelContext.insert(Budget(title: trimmedTitle, category: category, monthlyLimit: parsedAmount, period: period, rollover: rollover))
+        }
+        dismiss()
     }
 }
 
@@ -443,14 +501,41 @@ private struct AddRecurringView: View {
 }
 
 private struct CurrencySettingsView: View {
+    @Environment(\.modelContext) private var modelContext
     @Query private var wallets: [Wallet]
+    @AppStorage(ExchangeRateService.autoUpdateKey) private var autoUpdate = false
+    @State private var lastUpdate = UserDefaults.standard.object(forKey: ExchangeRateService.lastUpdateKey) as? Date
+    @State private var isUpdating = false
+    @State private var message: String?
+
+    private var hasForeignWallets: Bool { wallets.contains { $0.currencyCode != "EUR" } }
 
     var body: some View {
         List {
             Section {
-                Text("Il patrimonio principale è espresso in EUR. Per portafogli in altre valute inserisci manualmente quanti euro vale 1 unità della valuta.")
+                Text("Il patrimonio principale è espresso in EUR. Per i portafogli in altre valute serve sapere quanti euro vale 1 unità della valuta: puoi scriverlo tu o farlo aggiornare in automatico.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle("Aggiorna i cambi in automatico", isOn: $autoUpdate)
+                Button {
+                    updateNow()
+                } label: {
+                    HStack {
+                        Label("Aggiorna ora", systemImage: "arrow.clockwise")
+                        if isUpdating { Spacer(); ProgressView() }
+                    }
+                }
+                .disabled(isUpdating || !hasForeignWallets)
+                if let message {
+                    Text(message).font(.caption).foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Cambi ufficiali BCE")
+            } footer: {
+                Text(footerText)
             }
 
             ForEach(wallets) { wallet in
@@ -458,6 +543,32 @@ private struct CurrencySettingsView: View {
             }
         }
         .navigationTitle("Valute e cambi")
+        .onChange(of: autoUpdate) { _, enabled in
+            if enabled && hasForeignWallets { updateNow() }
+        }
+    }
+
+    private var footerText: String {
+        var text = "Una volta al giorno, all'apertura dell'app, Aurea scarica i cambi pubblicati dalla Banca Centrale Europea e li applica ai portafogli in valuta estera, sostituendo quelli scritti a mano. Le valute che la BCE non quota restano manuali."
+        if let lastUpdate {
+            text += " Ultimo aggiornamento: \(lastUpdate.formatted(date: .abbreviated, time: .shortened))."
+        }
+        return text
+    }
+
+    private func updateNow() {
+        isUpdating = true
+        message = nil
+        Task {
+            do {
+                let changed = try await ExchangeRateService.update(in: modelContext)
+                message = changed == 0 ? "Cambi già aggiornati." : "Aggiornati \(changed) portafogli."
+            } catch {
+                message = "Aggiornamento non riuscito: controlla la connessione e riprova."
+            }
+            lastUpdate = UserDefaults.standard.object(forKey: ExchangeRateService.lastUpdateKey) as? Date
+            isUpdating = false
+        }
     }
 }
 
@@ -483,8 +594,8 @@ private struct CurrencyRateRow: View {
                     .font(.caption)
             }
         }
-        .onAppear {
-            if let rate = wallet.exchangeRateToEUR {
+        .onChange(of: wallet.exchangeRateToEUR, initial: true) { _, rate in
+            if let rate {
                 rateText = NSDecimalNumber(decimal: rate).stringValue
             }
         }

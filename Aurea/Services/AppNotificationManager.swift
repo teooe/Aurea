@@ -17,7 +17,11 @@ enum AppNotificationManager {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
     }
 
+    /// Nei test dell'interfaccia (screenshot compresi) niente notifiche: la richiesta di permesso coprirebbe l'app.
+    static var isUITesting: Bool { ProcessInfo.processInfo.arguments.contains("-UITesting") }
+
     static func refresh(relationships: [Relationship], recurring: [RecurringTransaction], budgets: [Budget], transactions: [Transaction]) {
+        guard !isUITesting else { return }
         requestAuthorization()
         scheduleRelationships(relationships)
         scheduleRecurring(recurring)
@@ -101,18 +105,18 @@ enum AppNotificationManager {
 
     private static func evaluateBudgets(_ budgets: [Budget], transactions: [Transaction]) {
         guard UserDefaults.standard.object(forKey: budgetKey) as? Bool ?? true else { return }
-        let monthKey = Date().formatted(.dateTime.year().month())
-        for budget in budgets where !budget.isArchived && budget.monthlyLimit > 0 {
-            let spent = FinancialEngine.spentThisMonth(for: budget, transactions: transactions)
-            let ratio = NSDecimalNumber(decimal: spent / budget.monthlyLimit).doubleValue
+        for budget in budgets where !budget.isArchived && budget.limit > 0 {
+            let status = BudgetEngine.status(for: budget, transactions: transactions)
+            let (spent, ratio) = (status.spent, status.ratio)
             guard ratio >= 0.8 else { continue }
             let level = ratio >= 1 ? "100" : "80"
-            let memoryKey = "aurea.budget.alert.\(budget.id.uuidString).\(monthKey).\(level)"
+            // Un avviso per livello e per periodo: a ogni nuovo mese o settimana si riparte.
+            let memoryKey = "aurea.budget.alert.\(budget.id.uuidString).\(BudgetEngine.periodKey(for: status)).\(level)"
             guard !UserDefaults.standard.bool(forKey: memoryKey) else { continue }
             UserDefaults.standard.set(true, forKey: memoryKey)
             let content = UNMutableNotificationContent()
             content.title = ratio >= 1 ? "Budget superato" : "Budget quasi esaurito"
-            content.body = "\(budget.title): \(spent.formatted(.currency(code: "EUR"))) su \(budget.monthlyLimit.formatted(.currency(code: "EUR")))"
+            content.body = "\(budget.title): \(spent.formatted(.currency(code: "EUR"))) su \(status.limit.formatted(.currency(code: "EUR")))"
             content.sound = .default
             UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "budget-\(budget.id.uuidString)-\(level)", content: content, trigger: nil))
         }

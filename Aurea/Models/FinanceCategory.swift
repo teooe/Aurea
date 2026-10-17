@@ -3,11 +3,11 @@ import SwiftData
 
 @Model
 final class FinanceCategory {
-    var id: UUID
-    var name: String
-    var typeRawValue: String
-    var icon: String
-    var isArchived: Bool
+    var id: UUID = UUID()
+    var name: String = ""
+    var typeRawValue: String = ""
+    var icon: String = ""
+    var isArchived: Bool = false
 
     init(name: String, type: TransactionType, icon: String = "tag", isArchived: Bool = false) {
         self.id = UUID()

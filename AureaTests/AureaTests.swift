@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import SwiftData
+import UIKit
 @testable import Aurea
 
 // Il target dell'app isola i tipi su MainActor per impostazione predefinita: la suite gira lì.
@@ -505,6 +506,225 @@ struct AureaTests {
         #expect(FinancialEngine.dailyAllowance(limit: 100, spent: 150, now: sept25, calendar: calendar) == 0)
     }
 
+    @Test func monthlyExpensesCoverLastMonthsInOrder() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 15))!
+        let items = [
+            Transaction(type: .expense, amount: 100, date: calendar.date(from: DateComponents(year: 2026, month: 10, day: 2))!, category: "Casa", title: "Ottobre"),
+            Transaction(type: .expense, amount: 40, date: calendar.date(from: DateComponents(year: 2026, month: 8, day: 20))!, category: "Svago", title: "Agosto"),
+            Transaction(type: .expense, amount: 999, date: calendar.date(from: DateComponents(year: 2026, month: 3, day: 1))!, category: "Casa", title: "Troppo vecchio"),
+            Transaction(type: .income, amount: 500, date: now, category: "Stipendio", title: "Entrata"),
+            Transaction(type: .expense, amount: 70, date: now, category: Transaction.transferCategory, title: "Giroconto", transferGroupID: UUID()),
+        ]
+
+        let points = FinancialEngine.monthlyExpenses(from: items, months: 3, now: now, calendar: calendar)
+
+        #expect(points.map { calendar.component(.month, from: $0.monthStart) } == [8, 9, 10])
+        #expect(points.map(\.total) == [40, 0, 100])
+    }
+
+    @Test func weeklyBudgetUsesMondayToSundayWeek() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.firstWeekday = 1 // anche con un telefono "americano" la settimana parte di lunedì
+        let thursday = calendar.date(from: DateComponents(year: 2026, month: 10, day: 15, hour: 12))!
+        let monday = calendar.date(from: DateComponents(year: 2026, month: 10, day: 12, hour: 9))!
+        let previousSunday = calendar.date(from: DateComponents(year: 2026, month: 10, day: 11, hour: 20))!
+        let budget = Budget(title: "Bar", category: "Bar", monthlyLimit: 15, period: .weekly, createdAt: monday)
+        let items = [
+            Transaction(type: .expense, amount: 4, date: monday, category: "Bar", title: "Caffè"),
+            Transaction(type: .expense, amount: 6, date: previousSunday, category: "Bar", title: "Domenica scorsa"),
+        ]
+
+        let status = BudgetEngine.status(for: budget, transactions: items, now: thursday, calendar: calendar)
+
+        #expect(calendar.component(.weekday, from: status.interval.start) == 2)
+        #expect(status.spent == 4)
+        #expect(status.limit == 15)
+        // Giovedì → domenica: 4 giorni, 11 € rimasti.
+        #expect(BudgetEngine.dailyAllowance(for: status, now: thursday, calendar: calendar) == Decimal(string: "2.75")!)
+    }
+
+    @Test func rolloverAddsOnlyLastPeriodUnspentAmount() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 15))!
+        let created = calendar.date(from: DateComponents(year: 2026, month: 8, day: 1))!
+        let budget = Budget(title: "Spesa", category: "Alimentari", monthlyLimit: 300, rollover: true, createdAt: created)
+        let items = [
+            Transaction(type: .expense, amount: 250, date: calendar.date(from: DateComponents(year: 2026, month: 9, day: 10))!, category: "Alimentari", title: "Settembre"),
+            Transaction(type: .expense, amount: 100, date: calendar.date(from: DateComponents(year: 2026, month: 8, day: 10))!, category: "Alimentari", title: "Agosto"),
+            Transaction(type: .expense, amount: 80, date: calendar.date(from: DateComponents(year: 2026, month: 10, day: 5))!, category: "Alimentari", title: "Ottobre"),
+        ]
+
+        let status = BudgetEngine.status(for: budget, transactions: items, now: now, calendar: calendar)
+
+        // Riporta i 50 € avanzati a settembre, non quelli di agosto.
+        #expect(status.carriedOver == 50)
+        #expect(status.limit == 350)
+        #expect(status.spent == 80)
+
+        // Uno sforamento non riduce il limite successivo.
+        let overspent = [Transaction(type: .expense, amount: 400, date: calendar.date(from: DateComponents(year: 2026, month: 9, day: 10))!, category: "Alimentari", title: "Troppo")]
+        #expect(BudgetEngine.status(for: budget, transactions: overspent, now: now, calendar: calendar).limit == 300)
+    }
+
+    @Test func rolloverIgnoresPeriodsBeforeTheBudgetExisted() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 15))!
+        let budget = Budget(title: "Nuovo", monthlyLimit: 300, rollover: true, createdAt: calendar.date(from: DateComponents(year: 2026, month: 10, day: 3))!)
+
+        let status = BudgetEngine.status(for: budget, transactions: [], now: now, calendar: calendar)
+
+        #expect(status.carriedOver == 0)
+        #expect(status.limit == 300)
+    }
+
+    @Test func receiptPhotoIsResizedAndCompressed() throws {
+        let big = UIGraphicsImageRenderer(size: CGSize(width: 3200, height: 1000), format: {
+            let format = UIGraphicsImageRendererFormat(); format.scale = 1; return format
+        }()).image { context in
+            UIColor.white.setFill(); context.fill(CGRect(x: 0, y: 0, width: 3200, height: 1000))
+        }
+
+        let data = try #require(ReceiptImage.jpegData(from: big))
+        let decoded = try #require(UIImage(data: data))
+
+        #expect(max(decoded.size.width, decoded.size.height) == ReceiptImage.maxDimension)
+        #expect(decoded.size.width / decoded.size.height == 3.2)
+    }
+
+    @Test func backupRoundTripKeepsReceiptPhotoAndBudgetOptions() throws {
+        let schema = AureaStore.schema
+        let source = try ModelContainer(for: schema, configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true))
+        let wallet = Wallet(name: "Conto", icon: "wallet.pass")
+        let expense = Transaction(type: .expense, amount: 12, category: "Bar", title: "Colazione", wallet: wallet)
+        expense.receiptImageData = Data([0xFF, 0xD8, 0xFF, 0xD9])
+        source.mainContext.insert(wallet)
+        source.mainContext.insert(expense)
+        source.mainContext.insert(Budget(title: "Bar", category: "Bar", monthlyLimit: 15, period: .weekly, rollover: true))
+        try source.mainContext.save()
+
+        let json = try BackupRestoreService.encode(BackupRestoreService.makePayload(context: source.mainContext))
+        let payload = try BackupRestoreService.decode(Data(json.utf8))
+
+        let target = try ModelContainer(for: schema, configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true))
+        try BackupRestoreService.restore(payload, context: target.mainContext)
+
+        let restored = try target.mainContext.fetch(FetchDescriptor<Transaction>())
+        #expect(restored.first?.receiptImageData == Data([0xFF, 0xD8, 0xFF, 0xD9]))
+        let budget = try #require(try target.mainContext.fetch(FetchDescriptor<Budget>()).first)
+        #expect(budget.period == .weekly)
+        #expect(budget.rollover)
+    }
+
+    @Test func splitKeepsCentsWithPayerAndSumsToTotal() {
+        let even = ExpenseSplitter.split(total: 60, otherPeople: 2)
+        #expect(even.mine == 20)
+        #expect(even.each == 20)
+
+        // 100 € in tre: 33,33 € a testa agli altri, 33,34 € a te.
+        let odd = ExpenseSplitter.split(total: 100, otherPeople: 2)
+        #expect(odd.each == Decimal(string: "33.33")!)
+        #expect(odd.mine == Decimal(string: "33.34")!)
+        #expect(odd.mine + odd.each * 2 == 100)
+
+        #expect(ExpenseSplitter.split(total: 50, otherPeople: 0).mine == 50)
+    }
+
+    @Test func sharedExpenseRecordsShareAdvanceAndCredits() throws {
+        let container = try ModelContainer(for: AureaStore.schema, configurations: ModelConfiguration(schema: AureaStore.schema, isStoredInMemoryOnly: true))
+        let context = container.mainContext
+        let wallet = Wallet(name: "Carta", icon: "creditcard", initialBalance: 200)
+        context.insert(wallet)
+
+        let created = ExpenseSplitter.record(total: 60, people: ["Luca", " Giulia ", ""], title: "Pizzeria", category: "Svago", date: .now, wallet: wallet, in: context)
+        try context.save()
+
+        let transactions = try context.fetch(FetchDescriptor<Transaction>())
+        let credits = try context.fetch(FetchDescriptor<Relationship>())
+        #expect(created.count == 4) // quota, anticipo, due crediti
+        #expect(FinancialEngine.totalExpenses(from: transactions) == 20)
+        #expect(FinancialEngine.balance(for: wallet) == 140)
+        #expect(Set(credits.map(\.personName)) == ["Luca", "Giulia"])
+        #expect(credits.allSatisfy { $0.type == .credit && $0.amount == 20 })
+    }
+
+    @Test func bankImportReadsItalianCSVWithPreamble() throws {
+        let csv = """
+        \u{FEFF}Intestatario;Mario Rossi
+        IBAN;IT60X0542811101000000123456
+
+        Data contabile;Data valuta;Descrizione;Importo (EUR)
+        02/10/2026;02/10/2026;PAGAMENTO POS ESSELUNGA MILANO;-62,40
+        05/10/2026;05/10/2026;"BONIFICO A FAVORE DI; STIPENDIO OTTOBRE";1.850,00
+        07/10/2026;08/10/2026;ADDEBITO NETFLIX.COM;-13,99
+        """
+        let table = try #require(BankImport.table(from: csv))
+        let mapping = BankImport.ColumnMapping.guess(header: table.header)
+
+        #expect(table.header == ["Data contabile", "Data valuta", "Descrizione", "Importo (EUR)"])
+        #expect(mapping.date == 0)
+        #expect(mapping.description == 2)
+        #expect(mapping.amount == 3)
+
+        let rows = BankImport.rows(from: table, mapping: mapping, existing: [])
+        #expect(rows.map(\.amount) == [Decimal(string: "-62.40")!, 1850, Decimal(string: "-13.99")!])
+        #expect(rows[1].description == "BONIFICO A FAVORE DI; STIPENDIO OTTOBRE")
+        #expect(rows.map(\.category) == ["Alimentari", "Stipendio", "Svago"])
+    }
+
+    @Test func bankImportHandlesSeparateDebitCreditColumns() throws {
+        let csv = """
+        Data Operazione,Data Valuta,Entrate,Uscite,Descrizione
+        01/10/2026,01/10/2026,,45.00,Rifornimento ENI
+        03/10/2026,03/10/2026,"1,200.50",,Accredito rimborso
+        """
+        let table = try #require(BankImport.table(from: csv))
+        let mapping = BankImport.ColumnMapping.guess(header: table.header)
+
+        #expect(mapping.debit == 3)
+        #expect(mapping.credit == 2)
+        #expect(mapping.amount == nil)
+        let rows = BankImport.rows(from: table, mapping: mapping, existing: [])
+        #expect(rows.map(\.amount) == [-45, Decimal(string: "1200.50")!])
+        #expect(rows.map(\.type) == [.expense, .income])
+    }
+
+    @Test func bankImportParsesAmountsAndDates() {
+        #expect(BankImport.amount(from: "1.234,56") == Decimal(string: "1234.56")!)
+        #expect(BankImport.amount(from: "1,234.56") == Decimal(string: "1234.56")!)
+        #expect(BankImport.amount(from: "-12,50") == Decimal(string: "-12.5")!)
+        #expect(BankImport.amount(from: "€ 8,00") == 8)
+        #expect(BankImport.amount(from: "(15,00)") == -15)
+        #expect(BankImport.amount(from: "1.000") == 1000)
+        #expect(BankImport.amount(from: "") == nil)
+
+        let calendar = Calendar(identifier: .gregorian)
+        let date = BankImport.date(from: "05/10/2026", calendar: calendar)
+        #expect(date.map { calendar.dateComponents([.year, .month, .day, .hour], from: $0) } == DateComponents(year: 2026, month: 10, day: 5, hour: 12))
+        #expect(BankImport.date(from: "2026-10-05 14:32:10", calendar: calendar) != nil)
+        #expect(BankImport.date(from: "ieri", calendar: calendar) == nil)
+    }
+
+    @Test func bankImportSkipsDuplicatesAndLearnsCategories() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let existing = [
+            Transaction(type: .expense, amount: Decimal(string: "62.40")!, date: calendar.date(from: DateComponents(year: 2026, month: 10, day: 1, hour: 18))!, category: "Alimentari", title: "Spesa"),
+            Transaction(type: .expense, amount: 30, date: calendar.date(from: DateComponents(year: 2026, month: 9, day: 1))!, category: "Hobby", title: "Negozio Modellismo Rossi"),
+        ]
+        let csv = """
+        Data;Descrizione;Importo
+        02/10/2026;POS ESSELUNGA;-62,40
+        03/10/2026;MODELLISMO ROSSI SRL;-18,00
+        """
+        let table = try #require(BankImport.table(from: csv))
+        let rows = BankImport.rows(from: table, mapping: .guess(header: table.header), existing: existing, calendar: calendar)
+
+        #expect(rows[0].isDuplicate)
+        #expect(!rows[0].isSelected)
+        #expect(!rows[1].isDuplicate)
+        #expect(rows[1].category == "Hobby") // imparata dallo storico
+    }
+
     @Test func relationshipRemainingAmountNeverBecomesNegative() {
         let relationship = Relationship(personName: "Luca", amount: 100, type: .debt, paidAmount: 40)
         #expect(relationship.remainingAmount == 60)
@@ -545,5 +765,44 @@ struct AureaTests {
         #expect(eur.effectiveExchangeRateToEUR == 1)
         #expect(foreignWithoutRate.effectiveExchangeRateToEUR == 1)
         #expect(foreignWithRate.effectiveExchangeRateToEUR == 1.15)
+    }
+
+    @Test func exchangeRatesAreReadFromECBFeedAndApplied() throws {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <gesmes:Envelope xmlns:gesmes="http://www.gesmes.org/xml/2002-08-01" xmlns="http://www.ecb.int/vocabulary/2002-08-01/eurofxref">
+            <gesmes:subject>Reference rates</gesmes:subject>
+            <Cube>
+                <Cube time='2026-10-14'>
+                    <Cube currency='USD' rate='1.0912'/>
+                    <Cube currency='JPY' rate='162.35'/>
+                    <Cube currency='GBP' rate='0.8500'/>
+                </Cube>
+            </Cube>
+        </gesmes:Envelope>
+        """
+        let rates = try #require(ExchangeRateService.parse(Data(xml.utf8)))
+        #expect(rates.perEUR.count == 3)
+        #expect(rates.perEUR["USD"] == Decimal(string: "1.0912"))
+        let day = try #require(rates.date)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Berlin")!
+        #expect(calendar.dateComponents([.year, .month, .day], from: day) == DateComponents(year: 2026, month: 10, day: 14))
+
+        // 1 GBP = 1 / 0,85 EUR, arrotondato a 6 decimali.
+        #expect(rates.rateToEUR(for: "GBP") == Decimal(string: "1.176471"))
+        #expect(rates.rateToEUR(for: "EUR") == 1)
+        #expect(rates.rateToEUR(for: "CHF") == nil)
+
+        let euro = Wallet(name: "Conto", icon: "wallet.pass")
+        let pounds = Wallet(name: "Londra", icon: "sterlingsign.circle", currencyCode: "GBP", exchangeRateToEUR: 1.1)
+        let francs = Wallet(name: "Svizzera", icon: "francsign.circle", currencyCode: "CHF", exchangeRateToEUR: Decimal(string: "1.05"))
+        #expect(ExchangeRateService.apply(rates, to: [euro, pounds, francs]) == 1)
+        #expect(pounds.exchangeRateToEUR == Decimal(string: "1.176471"))
+        #expect(francs.exchangeRateToEUR == Decimal(string: "1.05"))
+        #expect(euro.exchangeRateToEUR == nil)
+        // Riapplicare gli stessi cambi non cambia nulla.
+        #expect(ExchangeRateService.apply(rates, to: [euro, pounds, francs]) == 0)
+        #expect(ExchangeRateService.parse(Data("<html>errore</html>".utf8)) == nil)
     }
 }

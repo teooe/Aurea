@@ -12,14 +12,15 @@ final class UndoBanner {
     struct Notice: Identifiable {
         let id = UUID()
         let message: String
-        let transactions: [Transaction]
+        /// Tutto ciò che il salvataggio ha creato: movimenti e, per le spese condivise, i crediti.
+        let models: [any PersistentModel]
     }
 
     private(set) var notice: Notice?
 
     /// Mostra l'avviso per i movimenti appena salvati (due per un trasferimento).
-    func post(_ transactions: [Transaction], message: String) {
-        let notice = Notice(message: message, transactions: transactions)
+    func post(_ models: [any PersistentModel], message: String) {
+        let notice = Notice(message: message, models: models)
         self.notice = notice
         UIAccessibility.post(notification: .announcement, argument: message)
         Task { @MainActor in
@@ -32,8 +33,8 @@ final class UndoBanner {
     func undo(in context: ModelContext) {
         guard let notice else { return }
         // Se nel frattempo il movimento è stato eliminato dal dettaglio, non c'è nulla da annullare.
-        for transaction in notice.transactions where !transaction.isDeleted {
-            context.delete(transaction)
+        for model in notice.models where !model.isDeleted {
+            context.delete(model)
         }
         try? context.save()
         self.notice = nil

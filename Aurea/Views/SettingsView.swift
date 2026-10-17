@@ -22,6 +22,7 @@ struct SettingsView: View {
     @AppStorage("aurea.agenda.showCompleted") private var showCompletedAgenda = true
     @AppStorage("aurea.agenda.defaultReminder") private var defaultReminder = 0
     @AppStorage("aurea.appearance") private var appearanceRaw = AppAppearance.system.rawValue
+    @AppStorage(AureaStore.iCloudSyncKey) private var iCloudSync = false
 
     @State private var showingFinance = false
     @State private var showingAgenda = false
@@ -30,6 +31,7 @@ struct SettingsView: View {
     private let appLock = AppLock.shared
     @State private var showingOnboarding = false
     @State private var showingImporter = false
+    @State private var showingBankImport = false
     @State private var showingRestoreConfirmation = false
     @State private var pendingRestore: BackupRestoreService.Payload?
     @State private var exportItem: ExportItem?
@@ -112,6 +114,33 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    if AureaStore.isCloudSyncAvailable {
+                        Toggle(isOn: $iCloudSync) {
+                            Label("Sincronizza con iCloud", systemImage: "icloud")
+                        }
+                        if iCloudSync != AureaStore.isCloudSyncActive {
+                            Text("Chiudi e riapri Aurea per applicare la modifica.")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                    } else {
+                        LabeledContent {
+                            Text("Non attiva").foregroundStyle(.secondary)
+                        } label: {
+                            Label("Sincronizza con iCloud", systemImage: "icloud.slash")
+                        }
+                    }
+                } header: { Text("iCloud") }
+                footer: {
+                    Text(AureaStore.isCloudSyncAvailable
+                         ? "I dati restano sul dispositivo e, se attivi l'opzione, vengono copiati nel tuo iCloud privato e sincronizzati sugli altri dispositivi con lo stesso Apple ID. Fai un backup completo prima di attivarla."
+                         : "Per ora i dati restano solo su questo dispositivo. La sincronizzazione iCloud richiede un account sviluppatore Apple a pagamento: le istruzioni per attivarla sono in docs/iCloud.md.")
+                }
+
+                Section {
+                    Button { showingBankImport = true } label: {
+                        Label("Importa movimenti dalla banca", systemImage: "square.and.arrow.down")
+                    }
                     Button { exportCSV() } label: {
                         Label("Esporta movimenti CSV", systemImage: "tablecells")
                     }
@@ -122,7 +151,7 @@ struct SettingsView: View {
                         Label("Ripristina backup", systemImage: "arrow.counterclockwise.circle")
                     }
                 } header: { Text("Esportazione e backup") }
-                footer: { Text("Il backup completo include portafogli, movimenti, agenda, obiettivi, debiti/crediti, budget, ricorrenti e categorie. Il ripristino sostituisce i dati presenti dopo una conferma esplicita.") }
+                footer: { Text("Il backup completo include portafogli, movimenti con le foto degli scontrini, agenda, obiettivi, debiti/crediti, budget, ricorrenti e categorie. Il ripristino sostituisce i dati presenti dopo una conferma esplicita.") }
 
                 Section {
                     Button { showingOnboarding = true } label: { Label("Rivedi introduzione", systemImage: "play.rectangle") }
@@ -151,6 +180,7 @@ struct SettingsView: View {
             .sheet(isPresented: $showingQuickAdd) { GlobalQuickAddView() }
             .fullScreenCover(isPresented: $showingOnboarding) { OnboardingView() }
             .sheet(item: $exportItem) { item in ActivityView(activityItems: [item.url]) }
+            .sheet(isPresented: $showingBankImport) { BankImportView() }
             .fileImporter(isPresented: $showingImporter, allowedContentTypes: [.json], allowsMultipleSelection: false) { result in handleImport(result) }
             .confirmationDialog("Ripristinare questo backup?", isPresented: $showingRestoreConfirmation, titleVisibility: .visible) {
                 Button("Sostituisci i dati attuali", role: .destructive) { restorePendingBackup() }

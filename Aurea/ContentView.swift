@@ -117,6 +117,7 @@ struct ContentView: View {
         RecurringEngine.generateDueTransactions(from: recurringTransactions, in: modelContext)
         WidgetSnapshotBuilder.refresh(in: modelContext)
         refreshReminders()
+        if !isUITesting { ExchangeRateService.updateIfNeeded(in: modelContext) }
     }
 
     private func refreshReminders() {

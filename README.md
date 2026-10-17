@@ -10,7 +10,8 @@ App iOS in SwiftUI + SwiftData per la gestione personale: finanze (portafogli, m
 - `Aurea/Intents/` – azioni per Siri e Comandi rapidi
 - `Aurea/Shared/` – tipi condivisi con il widget
 - `Aurea/Components/`, `Aurea/Theme/` – componenti riusabili e tema grafico
-- `AureaWidgetSources/` – sorgenti del widget (il target va creato in Xcode, vedi il README della cartella)
+- `AureaWidget/` – widget "Spese del mese" e "Nuova spesa" (target `AureaWidgetExtension`, incluso nell'app)
+- `docs/iCloud.md` – come attivare la sincronizzazione iCloud (serve un account sviluppatore a pagamento)
 - `AureaTests/`, `AureaUITests/` – test
 - `.github/workflows/build.yml` – CI: compila ed esegue i test su simulatore iOS
 

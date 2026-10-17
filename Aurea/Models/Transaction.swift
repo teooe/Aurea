@@ -9,13 +9,15 @@ enum TransactionType: String, Codable {
 
 @Model
 final class Transaction {
-    var id: UUID
-    var type: TransactionType
-    var amount: Decimal
-    var date: Date
-    var category: String
-    var title: String
+    var id: UUID = UUID()
+    var type: TransactionType = TransactionType.expense
+    var amount: Decimal = 0
+    var date: Date = Date.now
+    var category: String = ""
+    var title: String = ""
     var transferGroupID: UUID?
+    /// Foto dello scontrino (JPEG ridotto). Salvata fuori dal database per non appesantirlo.
+    @Attribute(.externalStorage) var receiptImageData: Data?
 
     var wallet: Wallet?
 

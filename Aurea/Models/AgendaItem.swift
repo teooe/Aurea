@@ -23,16 +23,16 @@ enum AgendaPriority: String, Codable, CaseIterable, Identifiable {
 
 @Model
 final class AgendaItem {
-    var title: String
-    var note: String
-    var type: AgendaItemType
-    var date: Date
-    var hasTime: Bool
+    var title: String = ""
+    var note: String = ""
+    var type: AgendaItemType = AgendaItemType.task
+    var date: Date = Date.now
+    var hasTime: Bool = false
     var endDate: Date?
-    var isCompleted: Bool
-    var repeatRule: AgendaRepeat
+    var isCompleted: Bool = false
+    var repeatRule: AgendaRepeat = AgendaRepeat.never
     var reminderMinutesBefore: Int?
-    var createdAt: Date
+    var createdAt: Date = Date.now
     var priorityRaw: String = AgendaPriority.normal.rawValue
 
     var priority: AgendaPriority {
@@ -40,7 +40,7 @@ final class AgendaItem {
         set { priorityRaw = newValue.rawValue }
     }
 
-    init(title: String, note: String = "", type: AgendaItemType = .task, date: Date = .now, hasTime: Bool = false, endDate: Date? = nil, isCompleted: Bool = false, repeatRule: AgendaRepeat = .never, reminderMinutesBefore: Int? = nil, createdAt: Date = .now, priority: AgendaPriority = .normal) {
+    init(title: String, note: String = "", type: AgendaItemType = AgendaItemType.task, date: Date = .now, hasTime: Bool = false, endDate: Date? = nil, isCompleted: Bool = false, repeatRule: AgendaRepeat = AgendaRepeat.never, reminderMinutesBefore: Int? = nil, createdAt: Date = .now, priority: AgendaPriority = .normal) {
         self.title = title; self.note = note; self.type = type; self.date = date; self.hasTime = hasTime; self.endDate = endDate; self.isCompleted = isCompleted; self.repeatRule = repeatRule; self.reminderMinutesBefore = reminderMinutesBefore; self.createdAt = createdAt; self.priorityRaw = priority.rawValue
     }
 }

@@ -47,19 +47,19 @@ enum InsightsEngine {
     // MARK: - Budget
 
     static func budgetInsights(_ budgets: [Budget], transactions: [Transaction], now: Date, calendar: Calendar) -> [Insight] {
-        let month = transactions.filter { calendar.isDate($0.date, equalTo: now, toGranularity: .month) }
-        return budgets
-            .filter { !$0.isArchived && $0.monthlyLimit > 0 }
+        budgets
+            .filter { !$0.isArchived && $0.limit > 0 }
             .compactMap { budget in
-                let spent = FinancialEngine.spentThisMonth(for: budget, transactions: month, calendar: calendar)
-                let ratio = double(spent / budget.monthlyLimit)
+                let status = BudgetEngine.status(for: budget, transactions: transactions, now: now, calendar: calendar)
+                let ratio = status.ratio
                 if ratio >= 1 {
                     return Insight(id: "budget-\(budget.id)", kind: .alert, icon: "exclamationmark.octagon", title: "Budget \(budget.title) superato",
-                                   detail: "Hai speso \(euro(spent)) su \(euro(budget.monthlyLimit)), \(euro(spent - budget.monthlyLimit)) oltre il limite.")
+                                   detail: "Hai speso \(euro(status.spent)) su \(euro(status.limit)), \(euro(status.spent - status.limit)) oltre il limite.")
                 }
                 if ratio >= 0.8 {
+                    let perDay = BudgetEngine.dailyAllowance(for: status, now: now, calendar: calendar)
                     return Insight(id: "budget-\(budget.id)", kind: .warning, icon: "gauge.with.dots.needle.67percent", title: "Budget \(budget.title): \(Int(ratio * 100))% usato",
-                                   detail: "Restano \(euro(budget.monthlyLimit - spent)) fino a fine mese: \(euro(FinancialEngine.dailyAllowance(limit: budget.monthlyLimit, spent: spent, now: now, calendar: calendar))) al giorno.")
+                                   detail: "Restano \(euro(status.remaining)) fino a \(budget.period.endLabel): \(euro(perDay)) al giorno.")
                 }
                 return nil
             }

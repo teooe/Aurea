@@ -3,15 +3,22 @@ import SwiftData
 
 @Model
 final class Wallet {
-    var name: String
-    var icon: String
-    var currencyCode: String
-    var initialBalance: Decimal
+    var name: String = ""
+    var icon: String = ""
+    var currencyCode: String = "EUR"
+    var initialBalance: Decimal = 0
     var exchangeRateToEUR: Decimal?
     var archivedFlag: Bool?
 
+    // Relazioni opzionali e con inverso: è ciò che richiede la sincronizzazione iCloud (CloudKit).
     @Relationship(deleteRule: .cascade, inverse: \Transaction.wallet)
-    var transactions: [Transaction] = []
+    var transactions: [Transaction]? = []
+
+    @Relationship(deleteRule: .nullify, inverse: \Goal.linkedWallet)
+    var linkedGoals: [Goal]? = []
+
+    @Relationship(deleteRule: .nullify, inverse: \RecurringTransaction.wallet)
+    var recurringTransactions: [RecurringTransaction]? = []
 
     init(
         name: String,

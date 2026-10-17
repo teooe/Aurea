@@ -3,13 +3,13 @@ import SwiftData
 
 @Model
 final class Relationship {
-    var id: UUID
-    var personName: String
-    var amount: Decimal
-    var typeRawValue: String
-    var note: String
-    var createdAt: Date
-    var isClosed: Bool
+    var id: UUID = UUID()
+    var personName: String = ""
+    var amount: Decimal = 0
+    var typeRawValue: String = ""
+    var note: String = ""
+    var createdAt: Date = Date.now
+    var isClosed: Bool = false
     var dueDate: Date?
     var paidAmount: Decimal?
 
