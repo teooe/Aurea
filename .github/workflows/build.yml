@@ -59,7 +59,7 @@ jobs:
             -only-testing:AureaTests \
             IPHONEOS_DEPLOYMENT_TARGET=${{ steps.env.outputs.target }} \
             CODE_SIGNING_ALLOWED=NO \
-            | tee test.log | grep -E "error:|Test Case .* (passed|failed)|✔|✘|TEST (SUCCEEDED|FAILED)|Suite .* (passed|failed)" || true
+            | tee test.log | grep -E "error:|Test Case .* (passed|failed)|✔|✘|TEST (SUCCEEDED|FAILED)|Suite .* (passed|failed)|Expectation failed|recorded an issue|Issue recorded|failed:" || true
           grep -q "TEST SUCCEEDED" test.log
 
       - name: Log completi
