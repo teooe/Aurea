@@ -950,6 +950,7 @@ struct AureaTests {
         #expect(report.savingsRate == 0.5)
 
         let url = try MonthlyReportPDF.write(report)
+        #expect(url.lastPathComponent == "Aurea-Report-2026-09.pdf")
         let data = try Data(contentsOf: url)
         #expect(data.starts(with: Data("%PDF".utf8)))
     }

@@ -70,7 +70,11 @@ enum MonthlyReportPDF {
 
     @MainActor
     static func write(_ report: MonthlyReport) throws -> URL {
-        let name = report.monthStart.formatted(.dateTime.year().month(.twoDigits))
+        // "2026-09": niente "/" nel nome, che il sistema leggerebbe come una cartella.
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM"
+        let name = formatter.string(from: report.monthStart)
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("Aurea-Report-\(name).pdf")
         let renderer = ImageRenderer(content: MonthlyReportPage(report: report).frame(width: pageSize.width, height: pageSize.height))
         renderer.proposedSize = ProposedViewSize(pageSize)
