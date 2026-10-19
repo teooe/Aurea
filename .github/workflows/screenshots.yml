@@ -49,6 +49,26 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             | tail -40
 
+      - name: Dettagli dei problemi
+        if: failure()
+        run: |
+          [ -d Screenshots.xcresult ] || exit 0
+          xcrun xcresulttool get test-results tests --path Screenshots.xcresult > results.json || exit 0
+          python3 - <<'PY'
+          import json
+          def walk(node, test=None):
+              kind = node.get("nodeType")
+              if kind == "Test Case":
+                  test = node.get("name")
+              if kind == "Failure Message":
+                  message = node.get("name", "").replace("\n", " ")
+                  print(f"::error title={test}::{message[:900]}")
+              for child in node.get("children", []):
+                  walk(child, test)
+          for root in json.load(open("results.json")).get("testNodes", []):
+              walk(root)
+          PY
+
       - name: Estrai gli screenshot
         if: always()
         run: |
