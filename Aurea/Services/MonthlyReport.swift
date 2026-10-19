@@ -11,6 +11,8 @@ struct MonthlyReport: Equatable {
     }
 
     var monthStart: Date
+    /// "2026-09", calcolato con lo stesso calendario del report (usato nel nome del file).
+    var monthKey: String
     var income: Decimal
     var expenses: Decimal
     var previousExpenses: Decimal
@@ -54,6 +56,7 @@ struct MonthlyReport: Equatable {
 
         return MonthlyReport(
             monthStart: interval.start,
+            monthKey: String(format: "%04d-%02d", calendar.component(.year, from: interval.start), calendar.component(.month, from: interval.start)),
             income: FinancialEngine.totalIncome(from: inMonth),
             expenses: total,
             previousExpenses: FinancialEngine.totalExpenses(from: previous),
@@ -71,11 +74,7 @@ enum MonthlyReportPDF {
     @MainActor
     static func write(_ report: MonthlyReport) throws -> URL {
         // "2026-09": niente "/" nel nome, che il sistema leggerebbe come una cartella.
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM"
-        let name = formatter.string(from: report.monthStart)
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("Aurea-Report-\(name).pdf")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("Aurea-Report-\(report.monthKey).pdf")
         let renderer = ImageRenderer(content: MonthlyReportPage(report: report).frame(width: pageSize.width, height: pageSize.height))
         renderer.proposedSize = ProposedViewSize(pageSize)
         // Pagina sempre A4: la dimensione proposta dal renderer può essere zero (per esempio fuori da una finestra),
