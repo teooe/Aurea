@@ -955,6 +955,53 @@ struct AureaTests {
         #expect(data.starts(with: Data("%PDF".utf8)))
     }
 
+    @Test func eraseAllRemovesEveryRecordButKeepsPreferences() throws {
+        let container = try ModelContainer(for: AureaStore.schema, configurations: ModelConfiguration(schema: AureaStore.schema, isStoredInMemoryOnly: true))
+        let context = container.mainContext
+        let defaults = try #require(UserDefaults(suiteName: "aurea.tests.erase"))
+        defaults.removePersistentDomain(forName: "aurea.tests.erase")
+
+        let wallet = Wallet(name: "Conto", icon: "wallet.pass", initialBalance: 100)
+        context.insert(wallet)
+        let expense = Transaction(type: .expense, amount: 12, category: "Svago", title: "Cinema", wallet: wallet, tags: ["Uscite"])
+        expense.receiptImageData = Data([0xFF, 0xD8])
+        context.insert(expense)
+        context.insert(RecurringTransaction(title: "Netflix", amount: 13, category: "Svago", type: .expense, frequency: .monthly, nextDate: .now, wallet: wallet))
+        context.insert(Goal(title: "Vacanza", type: .economic, targetAmount: 500, currentAmount: 50, linkedWallet: wallet))
+        context.insert(Budget(title: "Svago", category: "Svago", monthlyLimit: 100))
+        let relationship = Relationship(personName: "Luca", amount: 20, type: .credit, note: "")
+        context.insert(relationship)
+        context.insert(RelationshipPayment(relationshipID: relationship.id, amount: 5, date: .now))
+        context.insert(AgendaItem(title: "Dentista"))
+        context.insert(FinanceCategory(name: "Hobby", type: .expense, icon: "paintbrush"))
+        try context.save()
+
+        defaults.set(true, forKey: "aurea.budget.alert.123.2026-10.80")
+        defaults.set("Conto", forKey: PaymentRecorder.defaultWalletKey)
+        defaults.set(Data([1]), forKey: BankImportMemory.key)
+        defaults.set("dark", forKey: "aurea.appearance")
+
+        try DataResetService.eraseAll(in: context, defaults: defaults)
+
+        #expect(try context.fetchCount(FetchDescriptor<Wallet>()) == 0)
+        #expect(try context.fetchCount(FetchDescriptor<Transaction>()) == 0)
+        #expect(try context.fetchCount(FetchDescriptor<RecurringTransaction>()) == 0)
+        #expect(try context.fetchCount(FetchDescriptor<Goal>()) == 0)
+        #expect(try context.fetchCount(FetchDescriptor<Budget>()) == 0)
+        #expect(try context.fetchCount(FetchDescriptor<Relationship>()) == 0)
+        #expect(try context.fetchCount(FetchDescriptor<RelationshipPayment>()) == 0)
+        #expect(try context.fetchCount(FetchDescriptor<AgendaItem>()) == 0)
+        // Le categorie personalizzate spariscono, quelle predefinite tornano subito.
+        let categories = try context.fetch(FetchDescriptor<FinanceCategory>()).map(\.name)
+        #expect(!categories.contains("Hobby"))
+        #expect(categories.contains("Alimentari"))
+
+        #expect(defaults.object(forKey: "aurea.budget.alert.123.2026-10.80") == nil)
+        #expect(defaults.object(forKey: PaymentRecorder.defaultWalletKey) == nil)
+        #expect(defaults.object(forKey: BankImportMemory.key) == nil)
+        #expect(defaults.string(forKey: "aurea.appearance") == "dark")
+    }
+
     @Test func exchangeRatesAreReadFromECBFeedAndApplied() throws {
         let xml = """
         <?xml version="1.0" encoding="UTF-8"?>
