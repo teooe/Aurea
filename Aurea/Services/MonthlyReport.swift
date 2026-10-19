@@ -74,20 +74,19 @@ enum MonthlyReportPDF {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("Aurea-Report-\(name).pdf")
         let renderer = ImageRenderer(content: MonthlyReportPage(report: report).frame(width: pageSize.width, height: pageSize.height))
         renderer.proposedSize = ProposedViewSize(pageSize)
-        var failure: Error?
-        renderer.render { size, draw in
-            var box = CGRect(origin: .zero, size: size)
-            guard let consumer = CGDataConsumer(url: url as CFURL),
-                  let context = CGContext(consumer: consumer, mediaBox: &box, nil) else {
-                failure = CocoaError(.fileWriteUnknown)
-                return
-            }
-            context.beginPDFPage(nil)
-            draw(context)
-            context.endPDFPage()
-            context.closePDF()
+        // Pagina sempre A4: la dimensione proposta dal renderer può essere zero (per esempio fuori da una finestra),
+        // e con una pagina vuota il contesto PDF non si crea.
+        var box = CGRect(origin: .zero, size: pageSize)
+        let data = NSMutableData()
+        guard let consumer = CGDataConsumer(data: data as CFMutableData),
+              let context = CGContext(consumer: consumer, mediaBox: &box, nil) else {
+            throw CocoaError(.fileWriteUnknown)
         }
-        if let failure { throw failure }
+        context.beginPDFPage(nil)
+        renderer.render { _, draw in draw(context) }
+        context.endPDFPage()
+        context.closePDF()
+        try (data as Data).write(to: url, options: .atomic)
         return url
     }
 }
