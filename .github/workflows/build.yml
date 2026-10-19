@@ -57,10 +57,32 @@ jobs:
             -scheme Aurea \
             -destination "id=${{ steps.env.outputs.device }}" \
             -only-testing:AureaTests \
+            -resultBundlePath UnitTests.xcresult \
             IPHONEOS_DEPLOYMENT_TARGET=${{ steps.env.outputs.target }} \
             CODE_SIGNING_ALLOWED=NO \
             | tee test.log | grep -E "error:|Test Case .* (passed|failed)|✔|✘|TEST (SUCCEEDED|FAILED)|Suite .* (passed|failed)|Expectation failed|recorded an issue|Issue recorded|failed:" || true
           grep -q "TEST SUCCEEDED" test.log
+
+      - name: Dettagli dei test falliti
+        if: failure()
+        run: |
+          # Il messaggio di ogni controllo fallito diventa un'annotazione, leggibile nel riepilogo della CI.
+          [ -d UnitTests.xcresult ] || exit 0
+          xcrun xcresulttool get test-results tests --path UnitTests.xcresult > results.json || exit 0
+          python3 - <<'PY'
+          import json
+          def walk(node, test=None):
+              kind = node.get("nodeType")
+              if kind == "Test Case":
+                  test = node.get("name")
+              if kind == "Failure Message":
+                  message = node.get("name", "").replace("\n", " ")
+                  print(f"::error title={test}::{message[:900]}")
+              for child in node.get("children", []):
+                  walk(child, test)
+          for root in json.load(open("results.json")).get("testNodes", []):
+              walk(root)
+          PY
 
       - name: Log completi
         if: always()
