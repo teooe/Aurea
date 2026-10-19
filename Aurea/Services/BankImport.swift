@@ -84,7 +84,7 @@ enum BankImport {
 
     /// Quale colonna contiene cosa. L'importo può essere in una colonna sola (con segno)
     /// oppure diviso in addebiti e accrediti.
-    struct ColumnMapping: Equatable {
+    struct ColumnMapping: Equatable, Codable {
         var date: Int?
         var description: Int?
         var amount: Int?
@@ -312,5 +312,36 @@ struct CategoryGuesser {
         return text.lowercased()
             .components(separatedBy: CharacterSet.alphanumerics.inverted)
             .filter { $0.count >= 4 && !stop.contains($0) && $0.contains(where: \.isLetter) }
+    }
+}
+
+/// Ricorda colonne e portafoglio scelti per ogni formato di file (riconosciuto dall'intestazione),
+/// così dal secondo import della stessa banca non serve controllare nulla.
+struct BankImportMemory {
+    struct Entry: Codable, Equatable {
+        var mapping: BankImport.ColumnMapping
+        var walletName: String?
+    }
+
+    static let key = "aurea.bankImport.formats"
+    var defaults: UserDefaults = .standard
+
+    static func signature(of header: [String]) -> String {
+        header.map { $0.trimmingCharacters(in: .whitespaces).lowercased() }.joined(separator: "|")
+    }
+
+    private var all: [String: Entry] {
+        guard let data = defaults.data(forKey: Self.key) else { return [:] }
+        return (try? JSONDecoder().decode([String: Entry].self, from: data)) ?? [:]
+    }
+
+    func entry(for header: [String]) -> Entry? {
+        all[Self.signature(of: header)]
+    }
+
+    func save(_ entry: Entry, for header: [String]) {
+        var values = all
+        values[Self.signature(of: header)] = entry
+        if let data = try? JSONEncoder().encode(values) { defaults.set(data, forKey: Self.key) }
     }
 }

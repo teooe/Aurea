@@ -266,7 +266,7 @@ struct AureaTests {
         let usd = Wallet(name: "Carta USD", icon: "creditcard", currencyCode: "USD", exchangeRateToEUR: 0.9)
         let eur = Wallet(name: "Conto", icon: "wallet.pass")
         let items = [
-            Transaction(type: .expense, amount: Decimal(string: "12.5")!, date: date, category: "Cibo", title: "Pizza; birra", wallet: eur),
+            Transaction(type: .expense, amount: Decimal(string: "12.5")!, date: date, category: "Cibo", title: "Pizza; birra", wallet: eur, tags: ["Vacanza", "Napoli"]),
             Transaction(type: .income, amount: Decimal(string: "10.01")!, date: date.addingTimeInterval(60), category: "Rimborso", title: "Rimborso \"cena\"", wallet: usd),
             Transaction(type: .expense, amount: 50, date: date.addingTimeInterval(120), category: Transaction.transferCategory, title: "Giroconto", wallet: eur, transferGroupID: UUID()),
         ]
@@ -275,9 +275,9 @@ struct AureaTests {
         let lines = csv.dropFirst().components(separatedBy: "\r\n").filter { !$0.isEmpty }
 
         #expect(csv.hasPrefix("\u{FEFF}"))
-        #expect(lines[0] == "Data;Ora;Tipo;Titolo;Categoria;Importo;Valuta;Importo EUR;Portafoglio")
-        #expect(lines[1] == "05/09/2026;08:30;Spesa;\"Pizza; birra\";Cibo;-12,5;EUR;-12,5;Conto")
-        #expect(lines[2] == "05/09/2026;08:31;Entrata;\"Rimborso \"\"cena\"\"\";Rimborso;10,01;USD;9,01;Carta USD")
+        #expect(lines[0] == "Data;Ora;Tipo;Titolo;Categoria;Importo;Valuta;Importo EUR;Portafoglio;Etichette")
+        #expect(lines[1] == "05/09/2026;08:30;Spesa;\"Pizza; birra\";Cibo;-12,5;EUR;-12,5;Conto;Vacanza, Napoli")
+        #expect(lines[2] == "05/09/2026;08:31;Entrata;\"Rimborso \"\"cena\"\"\";Rimborso;10,01;USD;9,01;Carta USD;")
         #expect(lines[3].hasPrefix("05/09/2026;08:32;Trasferimento;Giroconto;"))
     }
 
@@ -598,6 +598,7 @@ struct AureaTests {
         let wallet = Wallet(name: "Conto", icon: "wallet.pass")
         let expense = Transaction(type: .expense, amount: 12, category: "Bar", title: "Colazione", wallet: wallet)
         expense.receiptImageData = Data([0xFF, 0xD8, 0xFF, 0xD9])
+        expense.tags = ["Vacanza"]
         source.mainContext.insert(wallet)
         source.mainContext.insert(expense)
         source.mainContext.insert(Budget(title: "Bar", category: "Bar", monthlyLimit: 15, period: .weekly, rollover: true))
@@ -611,6 +612,7 @@ struct AureaTests {
 
         let restored = try target.mainContext.fetch(FetchDescriptor<Transaction>())
         #expect(restored.first?.receiptImageData == Data([0xFF, 0xD8, 0xFF, 0xD9]))
+        #expect(restored.first?.tags == ["Vacanza"])
         let budget = try #require(try target.mainContext.fetch(FetchDescriptor<Budget>()).first)
         #expect(budget.period == .weekly)
         #expect(budget.rollover)
@@ -765,6 +767,192 @@ struct AureaTests {
         #expect(eur.effectiveExchangeRateToEUR == 1)
         #expect(foreignWithoutRate.effectiveExchangeRateToEUR == 1)
         #expect(foreignWithRate.effectiveExchangeRateToEUR == 1.15)
+    }
+
+    @Test func monthForecastProjectsVariableSpendingAndAddsUpcomingRecurring() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Rome")!
+        func day(_ d: Int, _ m: Int = 10) -> Date { calendar.date(from: DateComponents(year: 2026, month: m, day: d, hour: 12))! }
+        let now = day(10)
+
+        let rent = RecurringTransaction(title: "Affitto", amount: 650, category: "Casa", type: .expense, frequency: .monthly, nextDate: day(3, 11))
+        let netflix = RecurringTransaction(title: "Netflix", amount: Decimal(string: "13.99")!, category: "Svago", type: .expense, frequency: .monthly, nextDate: day(20))
+        let paused = RecurringTransaction(title: "Palestra", amount: 39, category: "Salute", type: .expense, frequency: .monthly, nextDate: day(15), isActive: false)
+        let transactions = [
+            Transaction(type: .income, amount: 1850, date: day(1), category: "Stipendio", title: "Stipendio"),
+            Transaction(type: .expense, amount: 650, date: day(3), category: "Casa", title: "Affitto"),
+            Transaction(type: .expense, amount: 100, date: day(5), category: "Alimentari", title: "Spesa"),
+            Transaction(type: .expense, amount: 80, date: day(30, 9), category: "Alimentari", title: "Mese scorso"),
+            Transaction(type: .expense, amount: 50, date: day(6), category: Transaction.transferCategory, title: "Prelievo", transferGroupID: UUID()),
+        ]
+
+        let forecast = try #require(ForecastEngine.monthForecast(transactions: transactions, recurring: [rent, netflix, paused], now: now, calendar: calendar))
+        #expect(forecast.daysLeft == 21)
+        #expect(forecast.expensesSoFar == 750)
+        #expect(forecast.upcomingExpenses == Decimal(string: "13.99"))
+        // L'affitto è già pagato e non si ripete: la media giornaliera usa solo i 100 € di spesa (10 €/giorno).
+        #expect(forecast.projectedVariableExpenses == 210)
+        #expect(forecast.projectedExpenses == Decimal(string: "973.99"))
+        #expect(forecast.projectedBalance == Decimal(string: "876.01"))
+
+        // Nei primi giorni del mese la media non è affidabile.
+        #expect(ForecastEngine.monthForecast(transactions: transactions, recurring: [], now: day(2), calendar: calendar) == nil)
+    }
+
+    @Test func applePayPaymentIsRecordedOnceWithGuessedCategoryAndWallet() throws {
+        let container = try ModelContainer(for: AureaStore.schema, configurations: ModelConfiguration(schema: AureaStore.schema, isStoredInMemoryOnly: true))
+        let context = container.mainContext
+        let defaults = try #require(UserDefaults(suiteName: "aurea.tests.applepay"))
+        defaults.removePersistentDomain(forName: "aurea.tests.applepay")
+        let bank = Wallet(name: "Conto corrente", icon: "building.columns")
+        let card = Wallet(name: "Carta", icon: "creditcard")
+        context.insert(bank)
+        context.insert(card)
+        // Storico: "Bar Centrale" è già stato classificato come Bar.
+        context.insert(Transaction(type: .expense, amount: 2, date: .now.addingTimeInterval(-86_400), category: "Bar", title: "Bar Centrale", wallet: bank))
+        let now = Date.now
+
+        guard case .recorded(let coffee) = try PaymentRecorder.record(amountText: "€1,50", merchant: "Bar Centrale", card: "Carta Visa", in: context, defaults: defaults, now: now) else {
+            Issue.record("Il pagamento doveva essere registrato"); return
+        }
+        #expect(coffee.amount == Decimal(string: "1.5"))
+        #expect(coffee.category == "Bar")
+        #expect(coffee.wallet === card)
+
+        // La stessa automazione ripetuta subito dopo non duplica la spesa.
+        guard case .duplicate = try PaymentRecorder.record(amountText: "1.50", merchant: "Bar Centrale", card: "Carta Visa", in: context, defaults: defaults, now: now.addingTimeInterval(30)) else {
+            Issue.record("Il secondo pagamento identico doveva essere ignorato"); return
+        }
+
+        // Carta sconosciuta: si usa il portafoglio scelto in Impostazioni; negozio noto dalle regole.
+        defaults.set("Conto corrente", forKey: PaymentRecorder.defaultWalletKey)
+        guard case .recorded(let groceries) = try PaymentRecorder.record(amountText: "23,40 €", merchant: "ESSELUNGA MILANO", card: "Amex", in: context, defaults: defaults, now: now) else {
+            Issue.record("Il pagamento doveva essere registrato"); return
+        }
+        #expect(groceries.wallet === bank)
+        #expect(groceries.category == "Alimentari")
+
+        #expect(throws: IntentError.self) {
+            try PaymentRecorder.record(amountText: "gratis", merchant: nil, card: nil, in: context, defaults: defaults, now: now)
+        }
+    }
+
+    @Test func subscriptionDetectorFindsMonthlyChargesNotYetRecurring() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Rome")!
+        func day(_ d: Int, _ m: Int) -> Date { calendar.date(from: DateComponents(year: 2026, month: m, day: d, hour: 12))! }
+        let now = day(15, 10)
+        var transactions: [Transaction] = []
+        for month in 7...10 {
+            // Spotify ogni mese, con un piccolo aumento di prezzo.
+            transactions.append(Transaction(type: .expense, amount: month < 9 ? Decimal(string: "10.99")! : Decimal(string: "11.99")!, date: day(3, month), category: "Svago", title: "Spotify AB \(month)/2026"))
+            // Netflix è già tra le ricorrenti.
+            transactions.append(Transaction(type: .expense, amount: Decimal(string: "13.99")!, date: day(5, month), category: "Svago", title: "Netflix"))
+            // La spesa al supermercato capita più volte al mese: non è un abbonamento.
+            transactions.append(Transaction(type: .expense, amount: 40, date: day(8, month), category: "Alimentari", title: "Esselunga"))
+            transactions.append(Transaction(type: .expense, amount: 42, date: day(20, month), category: "Alimentari", title: "Esselunga"))
+            // Importo che cambia molto: bolletta, non abbonamento.
+            transactions.append(Transaction(type: .expense, amount: Decimal(30 * (month - 5)), date: day(12, month), category: "Casa", title: "Enel energia"))
+        }
+        // Palestra: tre mesi ma poi interrotta da più di 40 giorni.
+        for month in 4...6 {
+            transactions.append(Transaction(type: .expense, amount: 39, date: day(10, month), category: "Salute", title: "Palestra"))
+        }
+        let netflix = RecurringTransaction(title: "Netflix", amount: Decimal(string: "13.99")!, category: "Svago", type: .expense, frequency: .monthly, nextDate: day(5, 11))
+
+        let found = SubscriptionDetector.candidates(transactions: transactions, recurring: [netflix], now: now, calendar: calendar)
+        #expect(found.map(\.title) == ["Spotify AB 10/2026"])
+        #expect(found.first?.amount == Decimal(string: "11.99"))
+        #expect(found.first?.months == 4)
+
+        let gym = RecurringTransaction(title: "Palestra", amount: 39, category: "Salute", type: .expense, frequency: .monthly, nextDate: day(10, 11))
+        let rent = RecurringTransaction(title: "Affitto", amount: 650, category: "Casa", type: .expense, frequency: .monthly, nextDate: day(3, 11), isActive: false)
+        #expect(SubscriptionDetector.yearlyCost(of: [netflix, gym, rent]) == Decimal(string: "635.88"))
+    }
+
+    @Test func bankImportRemembersColumnsPerFileFormat() throws {
+        let defaults = try #require(UserDefaults(suiteName: "aurea.tests.bankmemory"))
+        defaults.removePersistentDomain(forName: "aurea.tests.bankmemory")
+        let memory = BankImportMemory(defaults: defaults)
+        let header = ["Data", "Causale", "Uscite", "Entrate"]
+        #expect(memory.entry(for: header) == nil)
+
+        let mapping = BankImport.ColumnMapping(date: 0, description: 1, amount: nil, debit: 2, credit: 3)
+        memory.save(.init(mapping: mapping, walletName: "Conto corrente"), for: header)
+        // Stesso formato anche con spazi o maiuscole diverse; un altro formato non ne eredita le colonne.
+        #expect(memory.entry(for: [" data", "CAUSALE", "Uscite ", "entrate"]) == .init(mapping: mapping, walletName: "Conto corrente"))
+        #expect(memory.entry(for: ["Data", "Importo"]) == nil)
+    }
+
+    @Test func unusualSpendingIsFlaggedOnlyWhenFarAboveTheCategoryNorm() {
+        let now = Date.now
+        func daysAgo(_ days: Double) -> Date { now.addingTimeInterval(-days * 86_400) }
+        var transactions = (1...8).map { index in
+            Transaction(type: .expense, amount: Decimal(string: index.isMultiple(of: 2) ? "1.50" : "2")!, date: daysAgo(Double(10 + index * 5)), category: "Bar", title: "Caffè")
+        }
+        let big = Transaction(type: .expense, amount: 120, date: daysAgo(1), category: "Bar", title: "Aperitivo di compleanno")
+        let small = Transaction(type: .expense, amount: 6, date: daysAgo(2), category: "Bar", title: "Colazione")
+        // Categoria con poco storico: nessun avviso, non si sa cosa sia normale.
+        let newCategory = Transaction(type: .expense, amount: 500, date: daysAgo(1), category: "Viaggi", title: "Volo")
+        transactions += [big, small, newCategory]
+
+        let findings = UnusualSpendingDetector.findings(in: transactions, now: now)
+        #expect(findings.map(\.transactionID) == [big.id])
+        // Lo storico della spesa grande include anche la colazione da 6 €: mediana 2 €.
+        #expect(findings.first?.typical == 2)
+        #expect(UnusualSpendingDetector.median([3, 1, 2]) == 2)
+    }
+
+    @Test func tagsGroupSpendingAcrossCategories() {
+        #expect(Transaction.parseTags(" Vacanza, lavoro ,, vacanza ") == ["Vacanza", "lavoro"])
+        let now = Date.now
+        let trip = [
+            Transaction(type: .expense, amount: 120, date: now.addingTimeInterval(-3 * 86_400), category: "Trasporti", title: "Treno", tags: ["Sicilia 2026"]),
+            Transaction(type: .expense, amount: 300, date: now.addingTimeInterval(-2 * 86_400), category: "Casa", title: "B&B", tags: ["sicilia 2026", "Lavoro"]),
+            Transaction(type: .expense, amount: 45, date: now.addingTimeInterval(-86_400), category: "Svago", title: "Cena", tags: ["Sicilia 2026"]),
+            Transaction(type: .income, amount: 100, date: now, category: "Rimborso", title: "Rimborso B&B", tags: ["Sicilia 2026"]),
+            Transaction(type: .expense, amount: 9, date: now, category: "Bar", title: "Senza etichetta"),
+        ]
+        let summaries = TagEngine.summaries(from: trip)
+        #expect(summaries.count == 2)
+        let sicily = summaries.first { $0.name == "Sicilia 2026" }
+        #expect(sicily?.expenses == 465)
+        #expect(sicily?.income == 100)
+        #expect(sicily?.net == 365)
+        #expect(sicily?.count == 4)
+        #expect(sicily?.byCategory.first?.category == "Casa")
+        #expect(TagEngine.transactions(tagged: "SICILIA 2026", in: trip).count == 4)
+    }
+
+    @Test func monthlyReportSummarizesTheChosenMonthAndWritesAPDF() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Rome")!
+        func day(_ d: Int, _ m: Int) -> Date { calendar.date(from: DateComponents(year: 2026, month: m, day: d, hour: 12))! }
+        let transactions = [
+            Transaction(type: .income, amount: 2000, date: day(1, 9), category: "Stipendio", title: "Stipendio"),
+            Transaction(type: .expense, amount: 700, date: day(3, 9), category: "Casa", title: "Affitto"),
+            Transaction(type: .expense, amount: 200, date: day(10, 9), category: "Alimentari", title: "Spesa"),
+            Transaction(type: .expense, amount: 100, date: day(12, 9), category: "Alimentari", title: "Spesa"),
+            Transaction(type: .expense, amount: 50, date: day(12, 9), category: Transaction.transferCategory, title: "Giroconto", transferGroupID: UUID()),
+            Transaction(type: .expense, amount: 800, date: day(5, 8), category: "Casa", title: "Agosto"),
+            Transaction(type: .expense, amount: 60, date: day(2, 10), category: "Svago", title: "Ottobre"),
+        ]
+        let budget = Budget(title: "Spesa", category: "Alimentari", monthlyLimit: 250)
+        let report = MonthlyReport.make(for: day(15, 9), transactions: transactions, budgets: [budget], calendar: calendar)
+        #expect(report.income == 2000)
+        #expect(report.expenses == 1000)
+        #expect(report.balance == 1000)
+        #expect(report.previousExpenses == 800)
+        #expect(report.categories.map(\.title) == ["Casa", "Alimentari"])
+        #expect(report.categories.last?.amount == 300)
+        #expect(report.biggestExpenses.first?.title == "Affitto")
+        #expect(report.budgets.first?.amount == 300)
+        #expect(report.savingsRate == 0.5)
+
+        let url = try MonthlyReportPDF.write(report)
+        #expect(url.lastPathComponent == "Aurea-Report-2026-09.pdf")
+        let data = try Data(contentsOf: url)
+        #expect(data.starts(with: Data("%PDF".utf8)))
     }
 
     @Test func exchangeRatesAreReadFromECBFeedAndApplied() throws {

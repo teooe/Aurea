@@ -6,7 +6,7 @@ import SwiftData
 /// perché Excel riconosca le lettere accentate.
 enum CSVExporter {
 
-    static let header = ["Data", "Ora", "Tipo", "Titolo", "Categoria", "Importo", "Valuta", "Importo EUR", "Portafoglio"]
+    static let header = ["Data", "Ora", "Tipo", "Titolo", "Categoria", "Importo", "Valuta", "Importo EUR", "Portafoglio", "Etichette"]
 
     static func csv(for transactions: [Transaction], timeZone: TimeZone = .current) -> String {
         let dateFormatter = makeFormatter("dd/MM/yyyy", timeZone: timeZone)
@@ -27,6 +27,7 @@ enum CSVExporter {
                 transaction.wallet?.currencyCode ?? "EUR",
                 number(amountInEUR, scale: 2),
                 transaction.wallet?.name ?? "",
+                transaction.tags.joined(separator: ", "),
             ]
             lines.append(fields.map { escape($0) }.joined(separator: separator))
         }

@@ -37,6 +37,7 @@ struct HomeDashboardView: View {
             .sorted { $0.status.ratio > $1.status.ratio }
     }
     private var activeRecurring: [RecurringTransaction] { recurringTransactions.filter { $0.isActive } }
+    private var forecast: ForecastEngine.MonthForecast? { ForecastEngine.monthForecast(transactions: transactions, recurring: recurringTransactions) }
     private var upcomingRecurring: [RecurringTransaction] { activeRecurring.filter { $0.nextDate >= Calendar.current.startOfDay(for: .now) }.sorted { $0.nextDate < $1.nextDate } }
     private var openRelationships: [Relationship] { relationships.filter { !$0.isClosed && $0.remainingAmount > 0 } }
     private var dueRelationships: [Relationship] { let today = Calendar.current.startOfDay(for: .now); return openRelationships.filter { ($0.dueDate ?? .distantFuture) <= today } }
@@ -116,6 +117,9 @@ struct HomeDashboardView: View {
                     }
                     .frame(height: 7)
                 }
+                if let forecast, forecast.daysLeft > 0 {
+                    forecastRow(forecast)
+                }
                 if !budgetProgress.isEmpty {
                     Divider()
                     Button { showingFinanceCenter = true } label: {
@@ -143,6 +147,32 @@ struct HomeDashboardView: View {
                 }
             }
         }
+    }
+
+    private func forecastRow(_ forecast: ForecastEngine.MonthForecast) -> some View {
+        let balance = forecast.projectedBalance
+        let value = balance.formatted(.currency(code: "EUR").precision(.fractionLength(0)))
+        return HStack(alignment: .top, spacing: 10) {
+            Image(systemName: balance >= 0 ? "arrow.up.forward.circle" : "exclamationmark.triangle")
+                .foregroundStyle(balance >= 0 ? Theme.Colors.income : .orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("A questo ritmo finirai il mese con \(balance >= 0 ? "+" : "")\(value)")
+                    .font(.subheadline.weight(.semibold))
+                Text(forecastDetail(forecast))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func forecastDetail(_ forecast: ForecastEngine.MonthForecast) -> String {
+        func euro(_ value: Decimal) -> String { value.formatted(.currency(code: "EUR").precision(.fractionLength(0))) }
+        var parts = ["Spese previste \(euro(forecast.projectedExpenses))"]
+        if forecast.upcomingExpenses > 0 { parts.append("di cui \(euro(forecast.upcomingExpenses)) ricorrenti da pagare") }
+        if forecast.upcomingIncome > 0 { parts.append("entrate in arrivo \(euro(forecast.upcomingIncome))") }
+        return parts.joined(separator: " · ")
     }
 
     @ViewBuilder private var smartAlerts: some View {

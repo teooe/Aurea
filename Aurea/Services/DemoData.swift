@@ -49,6 +49,20 @@ enum DemoData {
             add(.expense, "60", "Casa", "Bolletta luce", bank, date(month, 25, 9))
         }
 
+        // Un abbonamento non ancora tra le ricorrenti: Aurea lo propone in "Ricorrenti".
+        if let twoMonthsAgo = calendar.date(byAdding: .month, value: -2, to: thisMonth) {
+            for month in [twoMonthsAgo, lastMonth, thisMonth] {
+                add(.expense, "10.99", "Svago", "Spotify", card, date(month, 7, 7))
+            }
+        }
+
+        // Un weekend con l'etichetta, per la schermata "Etichette e viaggi".
+        for (amount, category, title) in [("38", "Trasporti", "Treno per Como"), ("95", "Casa", "B&B sul lago"), ("46", "Svago", "Cena al lago")] {
+            if let when = date(lastMonth, 21, 13), let value = Decimal(string: amount) {
+                context.insert(Transaction(type: .expense, amount: value, date: when, category: category, title: title, wallet: card, tags: ["Weekend al lago"]))
+            }
+        }
+
         // Movimenti di oggi, così la card "Oggi" non è vuota.
         add(.expense, "1.30", "Bar", "Caffè", cash, calendar.date(bySettingHour: 8, minute: 15, second: 0, of: now).flatMap { $0 <= now ? $0 : nil })
         add(.expense, "12.50", "Alimentari", "Pranzo", card, calendar.date(bySettingHour: 13, minute: 10, second: 0, of: now).flatMap { $0 <= now ? $0 : nil } ?? now)

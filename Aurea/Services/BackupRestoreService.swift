@@ -17,7 +17,7 @@ enum BackupRestoreService {
     }
 
     struct WalletDTO: Codable { var name: String; var icon: String; var currencyCode: String; var initialBalance: Decimal; var exchangeRateToEUR: Decimal?; var isArchived: Bool }
-    struct TransactionDTO: Codable { var id: UUID; var type: String; var amount: Decimal; var date: Date; var category: String; var title: String; var walletName: String?; var transferGroupID: UUID?; var receiptImage: Data? }
+    struct TransactionDTO: Codable { var id: UUID; var type: String; var amount: Decimal; var date: Date; var category: String; var title: String; var walletName: String?; var transferGroupID: UUID?; var receiptImage: Data?; var tags: [String]? }
     struct AgendaDTO: Codable { var title: String; var note: String; var type: String; var date: Date; var hasTime: Bool; var endDate: Date?; var isCompleted: Bool; var repeatRule: String; var reminderMinutesBefore: Int?; var createdAt: Date; var priority: String }
     struct GoalDTO: Codable { var id: UUID; var title: String; var type: String; var targetAmount: Decimal?; var currentAmount: Decimal; var targetDate: Date?; var createdAt: Date; var isCompleted: Bool; var linkedWalletName: String? }
     struct RelationshipDTO: Codable { var id: UUID; var personName: String; var amount: Decimal; var type: String; var note: String; var createdAt: Date; var isClosed: Bool; var dueDate: Date?; var paidAmount: Decimal? }
@@ -39,7 +39,7 @@ enum BackupRestoreService {
 
         return Payload(
             wallets: wallets.map { .init(name: $0.name, icon: $0.icon, currencyCode: $0.currencyCode, initialBalance: $0.initialBalance, exchangeRateToEUR: $0.exchangeRateToEUR, isArchived: $0.isArchived) },
-            transactions: transactions.map { .init(id: $0.id, type: $0.type.rawValue, amount: $0.amount, date: $0.date, category: $0.category, title: $0.title, walletName: $0.wallet?.name, transferGroupID: $0.transferGroupID, receiptImage: $0.receiptImageData) },
+            transactions: transactions.map { .init(id: $0.id, type: $0.type.rawValue, amount: $0.amount, date: $0.date, category: $0.category, title: $0.title, walletName: $0.wallet?.name, transferGroupID: $0.transferGroupID, receiptImage: $0.receiptImageData, tags: $0.tags.isEmpty ? nil : $0.tags) },
             agenda: agenda.map { .init(title: $0.title, note: $0.note, type: $0.type.rawValue, date: $0.date, hasTime: $0.hasTime, endDate: $0.endDate, isCompleted: $0.isCompleted, repeatRule: $0.repeatRule.rawValue, reminderMinutesBefore: $0.reminderMinutesBefore, createdAt: $0.createdAt, priority: $0.priority.rawValue) },
             goals: goals.map { .init(id: $0.id, title: $0.title, type: $0.type.rawValue, targetAmount: $0.targetAmount, currentAmount: $0.currentAmount, targetDate: $0.targetDate, createdAt: $0.createdAt, isCompleted: $0.isCompleted, linkedWalletName: $0.linkedWallet?.name) },
             relationships: relationships.map { .init(id: $0.id, personName: $0.personName, amount: $0.amount, type: $0.type.rawValue, note: $0.note, createdAt: $0.createdAt, isClosed: $0.isClosed, dueDate: $0.dueDate, paidAmount: $0.paidAmount) },
@@ -71,7 +71,7 @@ enum BackupRestoreService {
             let item = FinanceCategory(name: dto.name, type: TransactionType(rawValue: dto.type) ?? .expense, icon: dto.icon, isArchived: dto.isArchived); item.id = dto.id; context.insert(item)
         }
         for dto in payload.transactions {
-            let item = Transaction(type: TransactionType(rawValue: dto.type) ?? .expense, amount: dto.amount, date: dto.date, category: dto.category, title: dto.title, wallet: dto.walletName.flatMap { walletMap[$0] }, transferGroupID: dto.transferGroupID); item.id = dto.id; item.receiptImageData = dto.receiptImage; context.insert(item)
+            let item = Transaction(type: TransactionType(rawValue: dto.type) ?? .expense, amount: dto.amount, date: dto.date, category: dto.category, title: dto.title, wallet: dto.walletName.flatMap { walletMap[$0] }, transferGroupID: dto.transferGroupID); item.id = dto.id; item.receiptImageData = dto.receiptImage; item.tags = dto.tags ?? []; context.insert(item)
         }
         for dto in payload.agenda {
             context.insert(AgendaItem(title: dto.title, note: dto.note, type: AgendaItemType(rawValue: dto.type) ?? .task, date: dto.date, hasTime: dto.hasTime, endDate: dto.endDate, isCompleted: dto.isCompleted, repeatRule: AgendaRepeat(rawValue: dto.repeatRule) ?? .never, reminderMinutesBefore: dto.reminderMinutesBefore, createdAt: dto.createdAt, priority: AgendaPriority(rawValue: dto.priority) ?? .normal))

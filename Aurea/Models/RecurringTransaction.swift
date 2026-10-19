@@ -10,7 +10,7 @@ final class RecurringTransaction {
     var typeRawValue: String = ""
     var frequencyRawValue: String = ""
     var nextDate: Date = Date.now
-    var isActive: Bool = false
+    var isActive: Bool = true
     var wallet: Wallet?
 
     init(title: String, amount: Decimal, category: String, type: TransactionType, frequency: RecurringFrequency, nextDate: Date, wallet: Wallet? = nil, isActive: Bool = true) {

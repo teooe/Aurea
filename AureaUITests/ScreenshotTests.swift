@@ -72,6 +72,15 @@ final class ScreenshotTests: XCTestCase {
                 }
                 tapVisible(app.navigationBars.buttons)
             }
+            for (button, name) in [("Movimenti ricorrenti", "12-Ricorrenti"), ("Etichette e viaggi", "13-Etichette")] {
+                let link = app.buttons[button].firstMatch
+                if link.waitForExistence(timeout: 3) {
+                    link.tap()
+                    sleep(1)
+                    snapshot(name)
+                    tapVisible(app.navigationBars.buttons)
+                }
+            }
             let currencies = app.buttons["Valute e cambi"].firstMatch
             if currencies.waitForExistence(timeout: 3) {
                 currencies.tap()

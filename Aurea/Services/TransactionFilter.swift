@@ -80,6 +80,7 @@ struct TransactionFilter: Equatable {
             guard !query.isEmpty else { return true }
             return transaction.title.localizedCaseInsensitiveContains(query) ||
                 transaction.category.localizedCaseInsensitiveContains(query) ||
+                (transaction.tagsRaw?.localizedCaseInsensitiveContains(query) ?? false) ||
                 (transaction.wallet?.name.localizedCaseInsensitiveContains(query) ?? false)
         }
     }

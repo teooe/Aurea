@@ -20,6 +20,8 @@ struct BankImportView: View {
     @State private var rows: [BankImport.Row] = []
     @State private var wallet: Wallet?
     @State private var errorMessage: String?
+    /// Le colonne arrivano dall'import precedente dello stesso formato.
+    @State private var usedSavedFormat = false
 
     private var activeWallets: [Wallet] { wallets.filter { !$0.isArchived } }
     private var selectedCount: Int { rows.filter(\.isSelected).count }
@@ -100,6 +102,8 @@ struct BankImportView: View {
         } footer: {
             if !mapping.isUsable {
                 Text("Indica almeno la colonna della data e quella dell'importo.").foregroundStyle(.red)
+            } else if usedSavedFormat {
+                Text("\(table.rows.count) righe nel file. Colonne e portafoglio sono quelli dell'ultimo import di questo formato.")
             } else {
                 Text("\(table.rows.count) righe nel file.")
             }
@@ -191,7 +195,14 @@ struct BankImportView: View {
             }
             fileName = url.lastPathComponent
             table = parsed
-            mapping = BankImport.ColumnMapping.guess(header: parsed.header)
+            if let saved = BankImportMemory().entry(for: parsed.header), saved.mapping.isUsable {
+                mapping = saved.mapping
+                usedSavedFormat = true
+                if let name = saved.walletName, let match = activeWallets.first(where: { $0.name == name }) { wallet = match }
+            } else {
+                mapping = BankImport.ColumnMapping.guess(header: parsed.header)
+                usedSavedFormat = false
+            }
             separateColumns = mapping.amount == nil && (mapping.debit != nil || mapping.credit != nil)
             rebuildRows()
             if !mapping.isUsable {
@@ -209,6 +220,7 @@ struct BankImportView: View {
 
     private func importSelected() {
         guard let wallet else { return }
+        if let table { BankImportMemory().save(.init(mapping: mapping, walletName: wallet.name), for: table.header) }
         let created = BankImport.importRows(rows, into: wallet, in: modelContext)
         try? modelContext.save()
         UndoBanner.shared.post(created, message: "Importati \(created.count) movimenti in \(wallet.name)")
