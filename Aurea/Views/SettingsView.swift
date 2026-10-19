@@ -37,6 +37,9 @@ struct SettingsView: View {
     @State private var pendingRestore: BackupRestoreService.Payload?
     @State private var exportItem: ExportItem?
     @State private var statusMessage: String?
+    @State private var showingEraseConfirmation = false
+    @State private var showingEraseFinalStep = false
+    @State private var eraseConfirmationText = ""
 
     private var openAgendaItems: Int { agendaItems.filter { !$0.isCompleted }.count }
     private var activeWallets: Int { wallets.filter { !$0.isArchived }.count }
@@ -171,6 +174,16 @@ struct SettingsView: View {
                 } header: { Text("Privacy e funzionamento") }
                 footer: { Text("Aurea usa i dati già presenti nell'app e chiede conferma prima delle azioni che modificano i dati.") }
 
+                Section {
+                    Button(role: .destructive) {
+                        showingEraseConfirmation = true
+                    } label: {
+                        Label("Elimina tutti i dati", systemImage: "trash")
+                            .foregroundStyle(.red)
+                    }
+                } header: { Text("Azzeramento") }
+                footer: { Text("Cancella portafogli, movimenti con le foto degli scontrini, budget, obiettivi, debiti/crediti, ricorrenti, agenda e categorie personalizzate. Le preferenze dell'app restano. Non si può annullare: crea prima un backup se vuoi conservare una copia.") }
+
                 Section("Informazioni") {
                     LabeledContent("App", value: "Aurea")
                     LabeledContent("Versione", value: appVersion)
@@ -193,6 +206,22 @@ struct SettingsView: View {
                 Button("Sostituisci i dati attuali", role: .destructive) { restorePendingBackup() }
                 Button("Annulla", role: .cancel) { pendingRestore = nil }
             } message: { Text("Prima di procedere, crea un backup dei dati attuali se vuoi poter tornare indietro.") }
+            .confirmationDialog("Eliminare tutti i dati di Aurea?", isPresented: $showingEraseConfirmation, titleVisibility: .visible) {
+                Button("Crea prima un backup") { createFullBackup() }
+                Button("Continua senza backup", role: .destructive) {
+                    eraseConfirmationText = ""
+                    showingEraseFinalStep = true
+                }
+                Button("Annulla", role: .cancel) {}
+            } message: { Text("Tutti i movimenti, i portafogli e gli altri dati verranno cancellati da questo iPhone.") }
+            .alert("Conferma eliminazione", isPresented: $showingEraseFinalStep) {
+                TextField("ELIMINA", text: $eraseConfirmationText)
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                Button("Elimina tutto", role: .destructive) { eraseAllData() }
+                    .disabled(eraseConfirmationText.trimmingCharacters(in: .whitespaces).uppercased() != "ELIMINA")
+                Button("Annulla", role: .cancel) {}
+            } message: { Text("Per confermare scrivi ELIMINA. L'operazione non si può annullare.") }
             .alert("Aurea", isPresented: Binding(get: { statusMessage != nil }, set: { if !$0 { statusMessage = nil } })) {
                 Button("OK") { statusMessage = nil }
             } message: { Text(statusMessage ?? "") }
@@ -222,6 +251,17 @@ struct SettingsView: View {
                 dailyReminderMinutes = (components.hour ?? 21) * 60 + (components.minute ?? 0)
             }
         )
+    }
+
+    private func eraseAllData() {
+        do {
+            try DataResetService.eraseAll(in: modelContext)
+            DataResetService.clearSideEffects(in: modelContext)
+            refreshReminders()
+            statusMessage = "Tutti i dati sono stati eliminati."
+        } catch {
+            statusMessage = "Eliminazione non riuscita: \(error.localizedDescription)"
+        }
     }
 
     private func refreshReminders() {
